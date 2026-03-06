@@ -1,0 +1,7 @@
+target/
+.git/
+**/*.rs.bk
+*.pdb
+.DS_Store
+# Use image's Rust; avoid toolchain override in Docker
+rust-toolchain.toml

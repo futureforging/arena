@@ -1,0 +1,16 @@
+[package]
+name = "arena-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "arena-runtime"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+cfg-if = "1.0"
+omnia = "0.28"
+omnia-wasi-http = "0.28"
+omnia-wasi-otel = "0.28"

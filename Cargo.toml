@@ -1,6 +1,9 @@
-[package]
-name = "arena"
+[workspace]
+resolver = "2"
+members = ["guest", "runtime"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
+authors = ["Arena"]
+license = "MIT OR Apache-2.0"
