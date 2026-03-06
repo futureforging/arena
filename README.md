@@ -19,12 +19,28 @@ docker compose down
 
 ```bash
 # Build guest (WASM) and runtime
-cargo build -p arena-guest --target wasm32-wasip2 --release
-cargo build -p arena-runtime --release
+cargo build -p arena-guest --target wasm32-wasip2
+cargo build -p arena-runtime
 
-# Run (WASM path may be target/wasm32-wasip2/release/arena_guest.wasm)
-./target/release/arena-runtime run ./target/wasm32-wasip2/release/arena_guest.wasm
+# Run (WASM path: target/wasm32-wasip2/debug/arena_guest.wasm)
+./target/debug/arena-runtime run ./target/wasm32-wasip2/debug/arena_guest.wasm
 ```
+
+## Integration Test
+
+The echo handler has an integration test that spawns the runtime, sends a request, and asserts the echoed response. It enforces a **15-second max duration** to fail fast.
+
+```bash
+# Build artifacts first, then run the test
+cargo build -p arena-guest --target wasm32-wasip2
+cargo build -p arena-runtime
+
+cargo test -p arena-runtime --test echo_integration
+```
+
+- **When artifacts exist**: Test runs in ~2–5 seconds (server startup + HTTP round-trip).
+- **When artifacts are missing**: Test fails in &lt;1 second with a clear build instruction.
+- **On timeout**: Test fails after 15 seconds with a timeout message.
 
 ## Project Structure
 

@@ -14,3 +14,7 @@ cfg-if = "1.0"
 omnia = "0.28"
 omnia-wasi-http = "0.28"
 omnia-wasi-otel = "0.28"
+
+[dev-dependencies]
+reqwest = { version = "0.11", default-features = false, features = ["blocking", "json"] }
+serde_json = "1.0"
