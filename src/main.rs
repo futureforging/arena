@@ -31,6 +31,8 @@ async fn main() -> io::Result<()> {
         std::process::exit(1);
     };
 
+    let peer_label = env::var("PEER_LABEL").unwrap_or_else(|_| "peer".to_string());
+
     let (r, mut w) = tokio::io::split(stream);
     let mut reader = BufReader::new(r).lines();
 
@@ -39,7 +41,7 @@ async fn main() -> io::Result<()> {
             .next_line()
             .await
         {
-            println!("{}", line);
+            println!("{}: {}", peer_label, line);
             print_prompt();
         }
     });
