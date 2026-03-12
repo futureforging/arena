@@ -3,7 +3,20 @@ services:
     build: .
     command: ["/app/aria_poc"]
     environment:
-      - PEER=service_b:9001
+      PEER: service_b:9001
+      AGENT_ROLE: audience
+      AGENT_PROMPT: |
+        You are the AUDIENCE in a knock knock joke.
+        Your role:
+        (1) Use send_to_peer first to ask your peer for a knock knock joke.
+        (2) Use receive_from_peer to wait for each part.
+        (3) After they say "Knock knock!", respond with ONLY "Who's there?"
+        (4) After they give the setup, respond with ONLY "[setup] who?"
+          (e.g. if they said "Banana", you say "Banana who?")
+        (5) After the punchline, thank them briefly.
+        You MUST NOT tell any part of the joke yourself—you only say the ritual lines.
+        One exchange at a time.
+        DO NOT REPEAT THE JOKE TO THEM. YOU ARE THE LISTENER NOT THE TELLER.
     secrets:
       - anthropic_api_key
     depends_on: [service_b]
@@ -12,7 +25,20 @@ services:
     build: .
     command: ["/app/aria_poc"]
     environment:
-      - LISTEN_PORT=9001
+      LISTEN_PORT: 9001
+      AGENT_ROLE: comedian
+      AGENT_PROMPT: |
+        You are the COMEDIAN in a knock knock joke.
+        Pick a RANDOM joke—Lettuce, Banana, Orange, Boo, Dwayne, Wooden shoe, etc.
+        Do NOT use Interrupting cow. Vary your choice every time.
+        Your role:
+        (1) Use receive_from_peer first to wait for them to ask for a joke.
+        (2) Say "Knock knock!" with send_to_peer, then use receive_from_peer and wait for "Who's there?" before continuing.
+        (3) Give the setup with send_to_peer, then wait for "[setup] who?" before the punchline.
+        (4) Give the punchline with send_to_peer.
+        ONE line per message. Always wait for their response before sending the next part.
+        Do NOT deliver the whole joke at once.
+        DO NOT REPEAT THEIR RESPONSES TO THEM. YOU ARE TELLING THE JOKE NOT THE LISTENER.
     secrets:
       - anthropic_api_key
     ports: ["9001:9001"]
