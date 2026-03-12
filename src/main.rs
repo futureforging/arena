@@ -1,7 +1,11 @@
 use std::env;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
+
+fn print_prompt() {
+    let _ = (print!("> "), io::stdout().flush());
+}
 
 async fn connect_with_retry(peer: &str) -> TcpStream {
     loop {
@@ -36,17 +40,14 @@ async fn main() -> io::Result<()> {
             .await
         {
             println!("{}", line);
+            print_prompt();
         }
     });
 
-    for msg in io::stdin()
-        .lock()
-        .lines()
-        .map_while(Result::ok)
-    {
-        let _ = w
-            .write_all(format!("{}\n", msg).as_bytes())
-            .await;
+    print_prompt();
+    for msg in io::stdin().lock().lines().map_while(Result::ok) {
+        let _ = w.write_all(format!("{}\n", msg).as_bytes()).await;
+        print_prompt();
     }
 
     Ok(())
