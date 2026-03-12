@@ -1,0 +1,14 @@
+services:
+  service_a:
+    build: .
+    tty: true
+    stdin_open: true
+    environment: [PEER=service_b:9001]
+    depends_on: [service_b]
+
+  service_b:
+    build: .
+    tty: true
+    stdin_open: true
+    environment: [LISTEN_PORT=9001]
+    ports: ["9001:9001"]
