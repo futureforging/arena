@@ -1,18 +1,22 @@
 services:
   service_a:
     build: .
-    tty: true
-    stdin_open: true
+    command: ["/app/aria_poc"]
     environment:
       - PEER=service_b:9001
-      - PEER_LABEL=agent-b
+    secrets:
+      - anthropic_api_key
     depends_on: [service_b]
 
   service_b:
     build: .
-    tty: true
-    stdin_open: true
+    command: ["/app/aria_poc"]
     environment:
       - LISTEN_PORT=9001
-      - PEER_LABEL=agent-a
+    secrets:
+      - anthropic_api_key
     ports: ["9001:9001"]
+
+secrets:
+  anthropic_api_key:
+    file: ./anthropic_api_key.txt
