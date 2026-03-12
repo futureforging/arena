@@ -8,9 +8,23 @@ use futures::StreamExt;
 
 use crate::ask_peer_tool::AskPeerTool;
 
-const PROMPT: &str = "Use the ask_peer tool to ask your peer Agent B for a knock knock joke. \
-    When you receive the response, follow the standard knock knock joke format until the punchline, \
-    then say thank you and we're done.";
+const PROMPT: &str = "Use the ask_peer tool once to ask your peer Agent B for a knock knock joke. \
+    Send exactly: 'Please tell me a knock knock joke.' \
+    When you receive the full joke in the response, thank Agent B briefly and we're done.";
+
+fn print_text_with_prefix(text: &str, need_prefix: &mut bool) {
+    for line in text.split_inclusive('\n') {
+        if *need_prefix {
+            print!("[Agent A] ");
+            *need_prefix = false;
+        }
+        print!("{}", line);
+        if line.ends_with('\n') {
+            *need_prefix = true;
+        }
+    }
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+}
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let peer = env::var("PEER").map_err(|_| "PEER environment variable is required")?;
@@ -31,6 +45,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .execute_stream(PROMPT)
         .await?;
     let mut stream = std::pin::pin!(stream);
+    let mut need_prefix = true;
 
     while let Some(event) = stream
         .next()
@@ -38,8 +53,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     {
         match event? {
             AgentEvent::Text(text) => {
-                print!("[Agent A] {}", text);
-                let _ = std::io::Write::flush(&mut std::io::stdout());
+                print_text_with_prefix(&text, &mut need_prefix);
             },
             AgentEvent::Thinking(text) => {
                 if !text.is_empty() {
@@ -51,7 +65,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 output,
                 ..
             } => {
-                println!("[Agent A] Tool {} completed: {}", name, output);
+                println!("\n[Agent A] → Tool {}: {}", name, output);
             },
             AgentEvent::ToolBlocked {
                 name,
@@ -64,11 +78,11 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 ..
             } => {},
             AgentEvent::Complete(result) => {
-                println!("[Agent A] Complete. Tokens: {}", result.total_tokens());
+                println!("\n[Agent A] Complete. Tokens: {}", result.total_tokens());
             },
         }
     }
 
-    println!("[Agent A] Done.");
+    println!("\n[Agent A] Done.");
     Ok(())
 }
