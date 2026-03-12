@@ -1,0 +1,12 @@
+max_width = 100 # Keep lines readable without being too narrow.
+hard_tabs = false # Use spaces for indentation.
+tab_spaces = 4 # Standard Rust indentation width.
+newline_style = "Unix" # Normalize line endings.
+imports_granularity = "Crate" # Group imports by crate.
+group_imports = "StdExternalCrate" # Order std, external, then local.
+reorder_imports = true # Keep imports consistently ordered.
+reorder_modules = true # Keep module declarations ordered.
+trailing_comma = "Vertical" # Enforce trailing commas in multi-line lists.
+match_block_trailing_comma = true # Keep trailing commas in match blocks.
+chain_width = 1 
+use_small_heuristics = "Off"
