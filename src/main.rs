@@ -1,6 +1,5 @@
 mod peer_agent;
-mod peer_protocol;
-mod peer_tools;
+mod tools;
 
 use std::env;
 use std::fs;

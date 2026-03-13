@@ -15,10 +15,9 @@ use futures::StreamExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 
-use crate::peer_protocol::PeerConnection;
-use crate::peer_tools::{
-    load_negotiation_protocol, pick_random_strategy,
-    CryptoTool, MessageLogFn, ReceiveFromPeerTool, SendToPeerTool,
+use crate::tools::{
+    CryptoTool, MessageLogFn, NegotiationProtocolPickerTool, PeerConnection,
+    ReceiveFromPeerTool, SendToPeerTool, StrategyPickerTool,
 };
 
 const DEFAULT_PORT: u16 = 9001;
@@ -29,9 +28,11 @@ const ENV_VERBOSE: &str = "PEER_AGENT_VERBOSE";
 /// When set, write full debug log to this path.
 const ENV_LOG: &str = "PEER_AGENT_LOG";
 
-const DEFAULT_PROMPT_CONNECTOR: &str = "Yao's Millionaire: determine who is richer without revealing exact wealth. Follow the protocol above. You are the connector. Use crypto tool for commitments.";
+const DEFAULT_PROMPT_CONNECTOR: &str =
+    "Yao's Millionaire: determine who is richer without revealing exact wealth. You are the connector.";
 
-const DEFAULT_PROMPT_LISTENER: &str = "Yao's Millionaire: determine who is richer without revealing exact wealth. Follow the protocol above. You are the listener. Use crypto tool for commitments.";
+const DEFAULT_PROMPT_LISTENER: &str =
+    "Yao's Millionaire: determine who is richer without revealing exact wealth. You are the listener.";
 
 const MAX_RETRIES: u32 = 3;
 
@@ -46,17 +47,21 @@ fn is_retryable_error(msg: &str) -> bool {
         || m.contains("stream error")
 }
 
-fn build_prompt(
-    base_prompt: String,
-    wealth: u32,
-    protocol: &str,
-    strategy: Option<&str>,
-) -> String {
-    let wealth_line = format!("Your wealth is ${} million.\n\n", wealth);
-    let strategy_section = strategy
-        .map(|s| format!("Strategy to propose (send this to your peer after handshake):\n{}\n\n", s))
-        .unwrap_or_default();
-    format!("{}{}\n---\n\n{}{}", wealth_line, protocol, strategy_section, base_prompt)
+const INSTRUCTIONS_CONNECTOR: &str = "Call negotiation_protocol_picker FIRST to get the protocol. Follow it exactly. Use strategy_picker to pick your strategy before proposing it to your peer. Use crypto tool for commitments.";
+
+const INSTRUCTIONS_LISTENER: &str =
+    "Call negotiation_protocol_picker FIRST to get the protocol. Follow it exactly. Use crypto tool for commitments.";
+
+fn build_prompt(base_prompt: String, wealth: u32, role: &str) -> String {
+    let instructions = if role == "connector" {
+        INSTRUCTIONS_CONNECTOR
+    } else {
+        INSTRUCTIONS_LISTENER
+    };
+    format!(
+        "Your wealth is ${} million.\n\n{}\n\n---\n\n{}",
+        wealth, instructions, base_prompt
+    )
 }
 
 fn load_prompt(role: &str) -> String {
@@ -74,6 +79,40 @@ fn load_prompt(role: &str) -> String {
         DEFAULT_PROMPT_CONNECTOR.to_string()
     } else {
         DEFAULT_PROMPT_LISTENER.to_string()
+    }
+}
+
+fn handle_agent_event(
+    ev: AgentEvent,
+    verbose: bool,
+    role_label: &str,
+    need_prefix: &mut bool,
+) {
+    match ev {
+        AgentEvent::Text(text) => {
+            if verbose {
+                print_text_with_prefix(&text, need_prefix);
+            }
+        }
+        AgentEvent::Thinking(text) => {
+            if !text.is_empty() {
+                println!("[{}] thinking: ({})", role_label, text);
+            }
+        }
+        AgentEvent::ToolComplete { name, output, .. } => {
+            if verbose {
+                println!("\n[PeerAgent] → Tool {}: {}", name, output);
+            }
+        }
+        AgentEvent::ToolBlocked { name, reason, .. } => {
+            eprintln!("[PeerAgent] Tool {} blocked: {}", name, reason);
+        }
+        AgentEvent::ContextUpdate { .. } => {}
+        AgentEvent::Complete(result) => {
+            if verbose {
+                println!("\n[PeerAgent] Complete. Tokens: {}", result.total_tokens());
+            }
+        }
     }
 }
 
@@ -155,25 +194,6 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let role_label = env::var("AGENT_ROLE").unwrap_or_else(|_| role.to_string());
     let wealth: u32 = rand::thread_rng().gen_range(1..=100);
     println!("[{}] Your wealth: ${} million (not revealed to peer)", role_label, wealth);
-
-    let protocol = match load_negotiation_protocol() {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("[{}] Error: {}", role_label, e);
-            return Err(e.into());
-        },
-    };
-    let strategy = if role == "connector" {
-        match pick_random_strategy() {
-            Ok(s) => Some(s),
-            Err(e) => {
-                eprintln!("[{}] Warning: {}", role_label, e);
-                None
-            },
-        }
-    } else {
-        None
-    };
     println!("[{}] Starting agent...", role_label);
 
     let mut send_tool = SendToPeerTool::new(Arc::clone(&connection));
@@ -184,13 +204,17 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     let base_prompt = load_prompt(role);
-    let prompt = build_prompt(base_prompt, wealth, &protocol, strategy.as_deref());
+    let prompt = build_prompt(base_prompt, wealth, role);
 
-    let builder = Agent::builder()
+    let mut builder = Agent::builder()
         .tools(ToolAccess::None)
         .tool(CryptoTool)
+        .tool(NegotiationProtocolPickerTool)
         .tool(send_tool)
         .tool(receive_tool);
+    if role == "connector" {
+        builder = builder.tool(StrategyPickerTool);
+    }
 
     let agent: Agent = builder
         .permission_mode(PermissionMode::BypassPermissions)
@@ -222,50 +246,14 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut stream_err = None;
 
         while let Some(event) = stream.next().await {
-            match event {
-                Ok(ev) => {
-                    match ev {
-            AgentEvent::Text(text) => {
-                if verbose {
-                    print_text_with_prefix(&text, &mut need_prefix);
-                }
-            },
-            AgentEvent::Thinking(text) => {
-                if !text.is_empty() {
-                    println!("[{}] thinking: ({})", role_label, text);
-                }
-            },
-            AgentEvent::ToolComplete {
-                name,
-                output,
-                ..
-            } => {
-                if verbose {
-                    println!("\n[PeerAgent] → Tool {}: {}", name, output);
-                }
-            },
-            AgentEvent::ToolBlocked {
-                name,
-                reason,
-                ..
-            } => {
-                eprintln!("[PeerAgent] Tool {} blocked: {}", name, reason);
-            },
-            AgentEvent::ContextUpdate {
-                ..
-            } => {},
-            AgentEvent::Complete(result) => {
-                if verbose {
-                    println!("\n[PeerAgent] Complete. Tokens: {}", result.total_tokens());
-                }
-            },
-                    }
-                },
+            let ev = match event {
+                Ok(e) => e,
                 Err(e) => {
                     stream_err = Some(e);
                     break;
-                },
-            }
+                }
+            };
+            handle_agent_event(ev, verbose, &role_label, &mut need_prefix);
         }
 
         if let Some(e) = stream_err {
