@@ -1,0 +1,15 @@
+=== default ===
+Handshake: Verify connectivity and confirm protocol name.
+  Connector: Send "ready default". Wait for peer reply.
+  Listener: Use receive_from_peer first. Expect "ready default". Reply "ready default".
+  Both must see the protocol name confirmed before continuing.
+
+Strategy:
+  Connector: Send the strategy (provided above) to your peer.
+  Listener: Receive the strategy. Accept it.
+
+Execute:
+  Both: Run the agreed strategy (use crypto tool for commitments). Exchange messages until you determine who is richer. NEVER reveal exact wealth—only ranges.
+
+Close:
+  Both: Acknowledge the result. Each must send "Acknowledged. Good game." (or similar) to the other. Do not end the conversation until your peer has sent their acknowledgment. Wait for mutual acknowledgment before ending.

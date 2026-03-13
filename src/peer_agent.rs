@@ -2,6 +2,10 @@ use std::env;
 use std::fs;
 use std::io::Write;
 use std::sync::Arc;
+use std::time::Duration;
+
+use rand::Rng;
+use tokio::time::sleep;
 
 use claude_agent::agent::AgentEvent;
 use claude_agent::permissions::PermissionMode;
@@ -12,7 +16,10 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 
 use crate::peer_protocol::PeerConnection;
-use crate::peer_tools::{JokePickerTool, MessageLogFn, ReceiveFromPeerTool, SendToPeerTool};
+use crate::peer_tools::{
+    load_negotiation_protocol, pick_random_strategy,
+    CryptoTool, MessageLogFn, ReceiveFromPeerTool, SendToPeerTool,
+};
 
 const DEFAULT_PORT: u16 = 9001;
 
@@ -22,9 +29,35 @@ const ENV_VERBOSE: &str = "PEER_AGENT_VERBOSE";
 /// When set, write full debug log to this path.
 const ENV_LOG: &str = "PEER_AGENT_LOG";
 
-const DEFAULT_PROMPT_CONNECTOR: &str = "You are in a conversation with a peer. Use send_to_peer to send your first message. Use receive_from_peer to wait for their reply, then send_to_peer to respond. Continue until the conversation reaches a natural conclusion.";
+const DEFAULT_PROMPT_CONNECTOR: &str = "Yao's Millionaire: determine who is richer without revealing exact wealth. Follow the protocol above. You are the connector. Use crypto tool for commitments.";
 
-const DEFAULT_PROMPT_LISTENER: &str = "You are in a conversation with a peer. Use receive_from_peer first to wait for their message. Use send_to_peer to respond. Continue until the conversation reaches a natural conclusion.";
+const DEFAULT_PROMPT_LISTENER: &str = "Yao's Millionaire: determine who is richer without revealing exact wealth. Follow the protocol above. You are the listener. Use crypto tool for commitments.";
+
+const MAX_RETRIES: u32 = 3;
+
+fn is_retryable_error(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    m.contains("overloaded")
+        || m.contains("internal server error")
+        || m.contains("rate limit")
+        || m.contains("429")
+        || m.contains("503")
+        || m.contains("502")
+        || m.contains("stream error")
+}
+
+fn build_prompt(
+    base_prompt: String,
+    wealth: u32,
+    protocol: &str,
+    strategy: Option<&str>,
+) -> String {
+    let wealth_line = format!("Your wealth is ${} million.\n\n", wealth);
+    let strategy_section = strategy
+        .map(|s| format!("Strategy to propose (send this to your peer after handshake):\n{}\n\n", s))
+        .unwrap_or_default();
+    format!("{}{}\n---\n\n{}{}", wealth_line, protocol, strategy_section, base_prompt)
+}
 
 fn load_prompt(role: &str) -> String {
     if let Ok(prompt) = env::var("AGENT_PROMPT") {
@@ -120,6 +153,29 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let connection = Arc::new(Mutex::new(connection));
 
     let role_label = env::var("AGENT_ROLE").unwrap_or_else(|_| role.to_string());
+    let wealth: u32 = rand::thread_rng().gen_range(1..=100);
+    println!("[{}] Your wealth: ${} million (not revealed to peer)", role_label, wealth);
+
+    let protocol = match load_negotiation_protocol() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[{}] Error: {}", role_label, e);
+            return Err(e.into());
+        },
+    };
+    let strategy = if role == "connector" {
+        match pick_random_strategy() {
+            Ok(s) => Some(s),
+            Err(e) => {
+                eprintln!("[{}] Warning: {}", role_label, e);
+                None
+            },
+        }
+    } else {
+        None
+    };
+    println!("[{}] Starting agent...", role_label);
+
     let mut send_tool = SendToPeerTool::new(Arc::clone(&connection));
     let mut receive_tool = ReceiveFromPeerTool::new(Arc::clone(&connection));
     if let Some(log) = create_message_logger(verbose, &role_label) {
@@ -127,14 +183,14 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         receive_tool = receive_tool.with_message_log(log);
     }
 
-    let prompt = load_prompt(role);
+    let base_prompt = load_prompt(role);
+    let prompt = build_prompt(base_prompt, wealth, &protocol, strategy.as_deref());
 
-    let mut builder = Agent::builder().tools(ToolAccess::None);
-
-    if role_label == "comedian" {
-        builder = builder.tool(JokePickerTool);
-    }
-    builder = builder.tool(send_tool).tool(receive_tool);
+    let builder = Agent::builder()
+        .tools(ToolAccess::None)
+        .tool(CryptoTool)
+        .tool(send_tool)
+        .tool(receive_tool);
 
     let agent: Agent = builder
         .permission_mode(PermissionMode::BypassPermissions)
@@ -143,27 +199,40 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .build()
         .await?;
 
-    println!("[PeerAgent] role={}", role_label);
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        let stream = match agent.execute_stream(&prompt).await {
+            Ok(s) => s,
+            Err(e) => {
+                if attempt < MAX_RETRIES && is_retryable_error(&e.to_string()) {
+                    let delay = Duration::from_secs(2_u64.pow(attempt - 1));
+                    eprintln!(
+                        "[{}] Retryable error (attempt {}): {}. Retrying in {:?}...",
+                        role_label, attempt, e, delay
+                    );
+                    sleep(delay).await;
+                    continue;
+                }
+                return Err(e.into());
+            },
+        };
+        let mut stream = std::pin::pin!(stream);
+        let mut need_prefix = true;
+        let mut stream_err = None;
 
-    let stream = agent
-        .execute_stream(&prompt)
-        .await?;
-    let mut stream = std::pin::pin!(stream);
-    let mut need_prefix = true;
-
-    while let Some(event) = stream
-        .next()
-        .await
-    {
-        match event? {
+        while let Some(event) = stream.next().await {
+            match event {
+                Ok(ev) => {
+                    match ev {
             AgentEvent::Text(text) => {
                 if verbose {
                     print_text_with_prefix(&text, &mut need_prefix);
                 }
             },
             AgentEvent::Thinking(text) => {
-                if verbose && !text.is_empty() {
-                    println!("[PeerAgent] (thinking) {}", text);
+                if !text.is_empty() {
+                    println!("[{}] thinking: ({})", role_label, text);
                 }
             },
             AgentEvent::ToolComplete {
@@ -190,7 +259,28 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     println!("\n[PeerAgent] Complete. Tokens: {}", result.total_tokens());
                 }
             },
+                    }
+                },
+                Err(e) => {
+                    stream_err = Some(e);
+                    break;
+                },
+            }
         }
+
+        if let Some(e) = stream_err {
+            if attempt < MAX_RETRIES && is_retryable_error(&e.to_string()) {
+                let delay = Duration::from_secs(2_u64.pow(attempt - 1));
+                eprintln!(
+                    "[{}] Retryable stream error (attempt {}): {}. Retrying in {:?}...",
+                    role_label, attempt, e, delay
+                );
+                sleep(delay).await;
+                continue;
+            }
+            return Err(e.into());
+        }
+        break;
     }
 
     {

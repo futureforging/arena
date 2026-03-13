@@ -1,6 +1,6 @@
-# Arena: Interactive Peer-to-Peer Agent Demo
+# Arena: Yao's Millionaire Peer Demo
 
-Two peer agents run the same binary in separate Docker containers. One connects (PEER), one listens (LISTEN_PORT). They exchange messages interactively—e.g. one asks for a knock knock joke, the other delivers it. Built with the `claude-agent` Rust crate.
+Two peer agents run the same binary in separate Docker containers. One connects (PEER), one listens (LISTEN_PORT). Each receives a random secret wealth (1–100 million) and uses cryptographic commitment schemes to determine who is richer without revealing their exact values. Built with the `claude-agent` Rust crate.
 
 ## Setup
 
@@ -27,11 +27,11 @@ Two peer agents run the same binary in separate Docker containers. One connects 
    docker compose up
    ```
 
-   Output from both agents appears in the foreground. When the joke is complete, both agents exit.
+   Each agent's wealth is printed at startup (not revealed to the other). Output from both agents appears in the foreground: thinking is shown inline as `[Agent X] thinking: (…)`, and messages as `[Agent X] → …`. When the exchange reaches a conclusion, both agents exit.
 
 3. **Output options**
 
-   By default, only the messages exchanged between agents are shown (`→` sent, `←` received). To see thinking, tool calls, and agent commentary, set:
+   By default, thinking and messages are shown. To also see tool names and token counts, set:
 
    ```bash
    PEER_AGENT_VERBOSE=1
@@ -42,3 +42,7 @@ Two peer agents run the same binary in separate Docker containers. One connects 
    ```bash
    PEER_AGENT_LOG=/path/to/debug.log
    ```
+
+4. **Negotiation protocol**
+
+   The negotiation protocol and wealth-comparison strategy are injected into each agent's prompt at startup. This avoids tool-call latency and coordination issues. Set `NEGOTIATION_PROTOCOL` (e.g. `default`) so both agents use the same protocol from `ref/negotiation-protocols.txt`. The connector also receives a random strategy from `ref/strategies.txt` to propose to the listener.

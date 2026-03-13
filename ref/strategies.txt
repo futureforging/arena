@@ -1,0 +1,7 @@
+commitment + bisection. Use binary/ternary range comparisons.
+NEVER commit to or reveal your exact wealth. You may ONLY commit to and reveal your RANGE (low/mid/high).
+Commit to your range via H(range||nonce), e.g. H("low:nonce") or H("mid:nonce").
+Post commitment hashes. Order does not matter; neither learns until reveal.
+Then both reveal simultaneously. Use these EXACT boundaries (inclusive): low [1-33], mid [34-66], high [67-100]. Do not invent different splits.
+Map your wealth: 1-33→low, 34-66→mid, 67-100→high. Examples: wealth 1, 33→low; wealth 34, 50, 52, 66→mid; wealth 67, 99, 100→high.
+If same range, bisect within that range and repeat.

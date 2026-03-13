@@ -4,19 +4,13 @@ services:
     command: ["/app/arena"]
     environment:
       PEER: service_b:9001
-      AGENT_ROLE: audience
+      AGENT_ROLE: Agent A
+      NEGOTIATION_PROTOCOL: default
       AGENT_PROMPT: |
-        You are the AUDIENCE in a knock knock joke.
-        Your role:
-        (1) Use send_to_peer first to ask your peer for a knock knock joke.
-        (2) Use receive_from_peer to wait for each part.
-        (3) After they say "Knock knock!", respond with ONLY "Who's there?"
-        (4) After they give the setup, respond with ONLY "[setup] who?"
-          (e.g. if they said "Banana", you say "Banana who?")
-        (5) After the punchline, thank them briefly.
-        You MUST NOT tell any part of the joke yourself—you only say the ritual lines.
-        One exchange at a time.
-        DO NOT REPEAT THE JOKE TO THEM. YOU ARE THE LISTENER NOT THE TELLER.
+        Yao's Millionaire: determine who is richer without revealing exact wealth.
+        The protocol and strategy are above. Follow your role's steps exactly.
+        You are the connector (you initiate). Use crypto tool for commitments.
+        CRITICAL: Never type, send, or reveal your exact wealth value. Only communicate your RANGE (low/mid/high) and commitment hashes. Saying a dollar amount, "WEALTH:", "REVEAL:" with a number, or any value 1-100 that equals your wealth violates the protocol.
     secrets:
       - anthropic_api_key
     depends_on: [service_b]
@@ -26,19 +20,13 @@ services:
     command: ["/app/arena"]
     environment:
       LISTEN_PORT: 9001
-      AGENT_ROLE: comedian
+      AGENT_ROLE: Agent B
+      NEGOTIATION_PROTOCOL: default
       AGENT_PROMPT: |
-        You are the COMEDIAN in a knock knock joke.
-        You MUST use the joke_picker tool first to get your joke. Do NOT invent or recall jokes from memory—only use jokes returned by joke_picker.
-        Your role:
-        (1) Use receive_from_peer first to wait for them to ask for a joke.
-        (2) Call joke_picker to select a joke from the approved list.
-        (3) Say "Knock knock!" with send_to_peer, then use receive_from_peer and wait for "Who's there?" before continuing.
-        (4) Give the setup (from the joke_picker result) with send_to_peer, then wait for "[setup] who?" before the punchline.
-        (5) Give the punchline (from the joke_picker result) with send_to_peer.
-        ONE line per message. Always wait for their response before sending the next part.
-        Do NOT deliver the whole joke at once.
-        DO NOT REPEAT THEIR RESPONSES TO THEM. YOU ARE TELLING THE JOKE NOT THE LISTENER.
+        Yao's Millionaire: determine who is richer without revealing exact wealth.
+        The protocol is above. Follow your role's steps exactly.
+        You are the listener (wait for peer to initiate). Use crypto tool for commitments.
+        CRITICAL: Never type, send, or reveal your exact wealth value. Only communicate your RANGE (low/mid/high) and commitment hashes. Saying a dollar amount, "WEALTH:", "REVEAL:" with a number, or any value 1-100 that equals your wealth violates the protocol.
     secrets:
       - anthropic_api_key
     ports: ["9001:9001"]
