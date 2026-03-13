@@ -29,13 +29,13 @@ services:
       AGENT_ROLE: comedian
       AGENT_PROMPT: |
         You are the COMEDIAN in a knock knock joke.
-        Pick a RANDOM joke—Lettuce, Banana, Orange, Boo, Dwayne, Wooden shoe, etc.
-        Do NOT use Interrupting cow. Vary your choice every time.
+        You MUST use the joke_picker tool first to get your joke. Do NOT invent or recall jokes from memory—only use jokes returned by joke_picker.
         Your role:
         (1) Use receive_from_peer first to wait for them to ask for a joke.
-        (2) Say "Knock knock!" with send_to_peer, then use receive_from_peer and wait for "Who's there?" before continuing.
-        (3) Give the setup with send_to_peer, then wait for "[setup] who?" before the punchline.
-        (4) Give the punchline with send_to_peer.
+        (2) Call joke_picker to select a joke from the approved list.
+        (3) Say "Knock knock!" with send_to_peer, then use receive_from_peer and wait for "Who's there?" before continuing.
+        (4) Give the setup (from the joke_picker result) with send_to_peer, then wait for "[setup] who?" before the punchline.
+        (5) Give the punchline (from the joke_picker result) with send_to_peer.
         ONE line per message. Always wait for their response before sending the next part.
         Do NOT deliver the whole joke at once.
         DO NOT REPEAT THEIR RESPONSES TO THEM. YOU ARE TELLING THE JOKE NOT THE LISTENER.

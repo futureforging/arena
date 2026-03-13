@@ -1,8 +1,11 @@
+use std::env;
+use std::fs;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use claude_agent::tools::{ExecutionContext, Tool};
 use claude_agent::types::ToolResult;
+use rand::seq::IteratorRandom;
 use tokio::sync::Mutex;
 
 use crate::peer_protocol::{self, PeerConnection};
@@ -54,29 +57,39 @@ impl Tool for SendToPeerTool {
         })
     }
 
-    async fn execute(
-        &self,
-        input: serde_json::Value,
-        _context: &ExecutionContext,
-    ) -> ToolResult {
-        let message = match input.get("message").and_then(|v| v.as_str()) {
+    async fn execute(&self, input: serde_json::Value, _context: &ExecutionContext) -> ToolResult {
+        let message = match input
+            .get("message")
+            .and_then(|v| v.as_str())
+        {
             Some(m) => m.to_string(),
             None => {
                 return ToolResult::error("Error: missing 'message' parameter");
-            }
+            },
         };
 
-        let mut conn = self.connection.lock().await;
+        let mut conn = self
+            .connection
+            .lock()
+            .await;
         if let Some(ref log) = self.message_log {
             log("sent", &message);
         }
-        if let Err(e) = conn.write_message(&message).await {
+        if let Err(e) = conn
+            .write_message(&message)
+            .await
+        {
             return ToolResult::error(format!("Error sending message: {e}"));
         }
-        match conn.read_message().await {
+        match conn
+            .read_message()
+            .await
+        {
             Ok(response) => {
                 if peer_protocol::is_end_sentinel(&response) {
-                    let _ = conn.write_sentinel().await;
+                    let _ = conn
+                        .write_sentinel()
+                        .await;
                     ToolResult::success("[Conversation ended by peer]")
                 } else {
                     ToolResult::success(response)
@@ -125,16 +138,20 @@ impl Tool for ReceiveFromPeerTool {
         })
     }
 
-    async fn execute(
-        &self,
-        _input: serde_json::Value,
-        _context: &ExecutionContext,
-    ) -> ToolResult {
-        let mut conn = self.connection.lock().await;
-        match conn.read_message().await {
+    async fn execute(&self, _input: serde_json::Value, _context: &ExecutionContext) -> ToolResult {
+        let mut conn = self
+            .connection
+            .lock()
+            .await;
+        match conn
+            .read_message()
+            .await
+        {
             Ok(response) => {
                 if peer_protocol::is_end_sentinel(&response) {
-                    let _ = conn.write_sentinel().await;
+                    let _ = conn
+                        .write_sentinel()
+                        .await;
                     ToolResult::success("[Conversation ended by peer]")
                 } else {
                     ToolResult::success(response)
@@ -142,5 +159,69 @@ impl Tool for ReceiveFromPeerTool {
             },
             Err(e) => ToolResult::error(format!("Error reading message: {e}")),
         }
+    }
+}
+
+/// Selects a random knock-knock joke from the approved list.
+#[derive(Clone)]
+pub struct JokePickerTool;
+
+#[async_trait]
+impl Tool for JokePickerTool {
+    fn name(&self) -> &str {
+        "joke_picker"
+    }
+
+    fn description(&self) -> &str {
+        "Select a random knock-knock joke from the approved list. You MUST use this tool to pick your joke before telling it—do not make up or recall jokes from memory."
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {}
+        })
+    }
+
+    async fn execute(&self, _input: serde_json::Value, _context: &ExecutionContext) -> ToolResult {
+        let path = env::var("JOKES_FILE").unwrap_or_else(|_| "ref/jokes.txt".to_string());
+
+        let content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => return ToolResult::error(format!("Error reading jokes file: {e}")),
+        };
+
+        let jokes: Vec<(String, String)> = content
+            .split("\n\n")
+            .filter_map(|block| {
+                let lines: Vec<&str> = block
+                    .trim()
+                    .lines()
+                    .collect();
+                if lines.len() >= 2 {
+                    let setup = lines[0]
+                        .trim()
+                        .to_string();
+                    let punchline = lines[1]
+                        .trim()
+                        .to_string();
+                    if !setup.is_empty() && !punchline.is_empty() {
+                        return Some((setup, punchline));
+                    }
+                }
+                None
+            })
+            .collect();
+
+        let (setup, punchline) = match jokes
+            .iter()
+            .choose(&mut rand::thread_rng())
+        {
+            Some(joke) => joke.clone(),
+            None => return ToolResult::error("No jokes found in file"),
+        };
+
+        let result = format!("Setup: {setup}\nPunchline: {punchline}");
+        ToolResult::success(result)
     }
 }

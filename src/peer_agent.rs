@@ -12,7 +12,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 
 use crate::peer_protocol::PeerConnection;
-use crate::peer_tools::{MessageLogFn, ReceiveFromPeerTool, SendToPeerTool};
+use crate::peer_tools::{JokePickerTool, MessageLogFn, ReceiveFromPeerTool, SendToPeerTool};
 
 const DEFAULT_PORT: u16 = 9001;
 
@@ -129,10 +129,14 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let prompt = load_prompt(role);
 
-    let agent: Agent = Agent::builder()
-        .tools(ToolAccess::None)
-        .tool(send_tool)
-        .tool(receive_tool)
+    let mut builder = Agent::builder().tools(ToolAccess::None);
+
+    if role_label == "comedian" {
+        builder = builder.tool(JokePickerTool);
+    }
+    builder = builder.tool(send_tool).tool(receive_tool);
+
+    let agent: Agent = builder
         .permission_mode(PermissionMode::BypassPermissions)
         .auth(Auth::from_env())
         .await?
