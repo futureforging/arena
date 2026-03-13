@@ -1,4 +1,4 @@
-# Aria POC 2: Interactive Peer-to-Peer Agent Demo
+# Arena: Interactive Peer-to-Peer Agent Demo
 
 Two peer agents run the same binary in separate Docker containers. One connects (PEER), one listens (LISTEN_PORT). They exchange messages interactively—e.g. one asks for a knock knock joke, the other delivers it. Built with the `claude-agent` Rust crate.
 

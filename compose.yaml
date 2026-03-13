@@ -1,7 +1,7 @@
 services:
   service_a:
     build: .
-    command: ["/app/aria_poc"]
+    command: ["/app/arena"]
     environment:
       PEER: service_b:9001
       AGENT_ROLE: audience
@@ -23,7 +23,7 @@ services:
 
   service_b:
     build: .
-    command: ["/app/aria_poc"]
+    command: ["/app/arena"]
     environment:
       LISTEN_PORT: 9001
       AGENT_ROLE: comedian
