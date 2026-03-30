@@ -1,11 +1,11 @@
 # aria-poc-2
 
-A Rust proof-of-concept binary. The codebase is a minimal starting point: `main.rs` defines an **`EnvironmentAdapter`** trait (e.g. **`ShellAdapter`** using `println!`), an **`Agent`** (`name`, `message`, and an adapter), **`create_agent`**, and **`Agent::print`**, which sends the message through the adapter. `main` builds an agent with `ShellAdapter` and calls `print()` (no direct `println!` in `main`).
+A Rust proof-of-concept binary. The codebase is a minimal starting point: **`core`** holds the **`Environment`** port, **`Agent`**, and (under **`cfg(test)`**) an **`InMemoryEnvironment`** test double in **`core/agent.rs`**; **`infrastructure/adapters/environment`** provides **`ShellEnvironment`** (via `println!`); **`application/factories/create_agent`** defines **`create_agent`**. `main.rs` re-exports the public surface and runs an agent whose **`Agent::print`** sends the message through the environment. `main` builds an agent with `ShellEnvironment` and calls `print()` (no direct `println!` in `main`).
 
 ## Current behavior
 
-- Running the binary prints `Hello, world!` via the shell adapter when `Agent::print()` runs.
-- Unit tests cover construction and that `print()` forwards the message to the adapter.
+- Running the binary prints `Hello, world!` via the shell environment when `Agent::print()` runs.
+- Unit tests cover construction and that `print()` forwards the message to the environment.
 
 ## Requirements
 
