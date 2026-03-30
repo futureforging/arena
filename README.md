@@ -1,11 +1,11 @@
 # aria-poc-2
 
-A Rust proof-of-concept binary. The codebase is a minimal starting point: a `message` module exposes a string, and the program prints it to stdout.
+A Rust proof-of-concept binary. The codebase is a minimal starting point: `main.rs` defines an **`Agent`** struct (`name` and `message` strings), constructs one in `main`, and prints the agent’s message.
 
 ## Current behavior
 
-- Running the binary prints `Hello, world!` (from `message::get_message()`).
-- The `message` module includes a unit test that asserts the returned string.
+- Running the binary prints `Hello, world!` (the configured agent’s `message`).
+- Unit tests in `main.rs` cover constructing an `Agent` with `name` and `message`.
 
 ## Requirements
 
