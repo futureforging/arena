@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "rust_base"
+name = "aria-poc-2"
 version = "0.1.0"
