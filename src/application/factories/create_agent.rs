@@ -1,22 +1,33 @@
-use crate::core::{agent::Agent, environment::Environment};
+use crate::core::{agent::Agent, environment::Environment, llm::Llm};
 
-/// Creates an [`Agent`] with the given `name`, `message`, and `environment`.
-pub fn create_agent<E: Environment>(
+/// Creates an [`Agent`] with the given `name`, `environment`, and `llm`.
+pub fn create_agent<E: Environment, L: Llm>(
     name: impl Into<String>,
-    message: impl Into<String>,
     environment: E,
-) -> Agent<E> {
+    llm: L,
+) -> Agent<E, L> {
     Agent {
         name: name.into(),
-        message: message.into(),
         environment,
+        llm,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::create_agent;
-    use crate::core::environment::{Environment, LoggingLevel};
+    use crate::core::{
+        environment::{Environment, LoggingLevel},
+        llm::Llm,
+    };
+
+    struct StubLlm;
+
+    impl Llm for StubLlm {
+        fn receive_message(&self, _message: &str) -> String {
+            String::new()
+        }
+    }
 
     struct NoopEnvironment;
 
@@ -31,9 +42,8 @@ mod tests {
     }
 
     #[test]
-    fn create_agent_sets_name_message_and_environment() {
-        let agent = create_agent("test", "ping", NoopEnvironment);
+    fn create_agent_sets_name_and_environment() {
+        let agent = create_agent("test", NoopEnvironment, StubLlm);
         assert_eq!(agent.name, "test");
-        assert_eq!(agent.message, "ping");
     }
 }

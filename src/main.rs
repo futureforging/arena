@@ -5,20 +5,19 @@ mod infrastructure;
 pub use core::{
     agent::Agent,
     environment::{log_message_is_allowed, Environment, LogMessageLevel, LoggingLevel},
+    llm::Llm,
 };
 
 pub use application::factories::create_agent::create_agent;
-pub use infrastructure::adapters::environment::ShellEnvironment;
+pub use infrastructure::adapters::{environment::ShellEnvironment, llm::DummyLlm};
 
 fn main() {
     let agent = create_agent(
         "Aria",
-        "Hello, world!",
         ShellEnvironment {
-            logging_level: LoggingLevel::Standard,
+            logging_level: LoggingLevel::None,
         },
+        DummyLlm,
     );
-    agent.log("This is a standard log message", LogMessageLevel::Standard);
-    agent.log("This is a verbose log message", LogMessageLevel::Verbose);
-    agent.print();
+    agent.receive_message("Example user message");
 }

@@ -1,26 +1,38 @@
-use super::environment::{Environment, LogMessageLevel};
+use super::{
+    environment::{Environment, LogMessageLevel},
+    llm::Llm,
+};
 
-/// An autonomous agent identified by name and carrying a message.
-pub struct Agent<E: Environment> {
+/// An autonomous agent identified by name.
+pub struct Agent<E: Environment, L: Llm> {
     /// Display name for this agent.
     pub name: String,
-    /// Message associated with this agent.
-    pub message: String,
     /// Bridges output to the host environment.
     pub environment: E,
+    /// Language model used for message exchange.
+    pub llm: L,
 }
 
-impl<E: Environment> Agent<E> {
-    /// Prints this agent’s [`message`](Agent::message) through its [`environment`](Agent::environment).
-    pub fn print(&self) {
+impl<E: Environment, L: Llm> Agent<E, L> {
+    /// Expresses `text` through [`environment`](Agent::environment) (e.g. stdout in the shell adapter).
+    pub fn print(&self, text: &str) {
         self.environment
-            .print(&self.message);
+            .print(text);
     }
 
     /// Logs `message` at `level` through its [`environment`](Agent::environment).
     pub fn log(&self, message: &str, level: LogMessageLevel) {
         self.environment
             .log(message, level);
+    }
+
+    /// Sends `message` to [`llm`](Agent::llm) and prints the reply via [`print`](Agent::print).
+    pub fn receive_message(&self, message: &str) {
+        self.log(&format!("{} <- {}", self.name, message), LogMessageLevel::Standard);
+        let reply = self
+            .llm
+            .receive_message(message);
+        self.print(&format!("{} -> {}", self.name, reply));
     }
 }
 
@@ -30,10 +42,9 @@ mod in_memory_environment {
 
     use crate::core::environment::{Environment, LoggingLevel};
 
-    /// Records [`Environment::print`](Environment::print) and [`Environment::log`](Environment::log) in memory (e.g. for tests).
+    /// Records [`Environment::print`](Environment::print) in memory (e.g. for tests). [`Environment::log`](Environment::log) is accepted but not stored.
     pub struct InMemoryEnvironment {
         lines: RefCell<Vec<String>>,
-        log_lines: RefCell<Vec<String>>,
         pub logging_level: LoggingLevel,
     }
 
@@ -41,7 +52,6 @@ mod in_memory_environment {
         pub fn new(logging_level: LoggingLevel) -> Self {
             Self {
                 lines: RefCell::new(Vec::new()),
-                log_lines: RefCell::new(Vec::new()),
                 logging_level,
             }
         }
@@ -65,11 +75,7 @@ mod in_memory_environment {
             self.logging_level
         }
 
-        fn emit_log(&self, message: &str) {
-            self.log_lines
-                .borrow_mut()
-                .push(message.to_string());
-        }
+        fn emit_log(&self, _message: &str) {}
     }
 }
 
@@ -78,20 +84,48 @@ mod tests {
     use super::{in_memory_environment::InMemoryEnvironment, Agent};
     use crate::core::environment::LoggingLevel;
 
+    /// Reply returned by [`StubLlm`]; only used to assert the agent prints whatever the port returns.
+    const STUB_LLM_REPLY: &str = "stub-llm-reply";
+
+    struct StubLlm;
+
+    impl crate::core::llm::Llm for StubLlm {
+        fn receive_message(&self, _message: &str) -> String {
+            STUB_LLM_REPLY.to_string()
+        }
+    }
+
     #[test]
-    fn agent_print_delegates_message_to_environment() {
+    fn agent_print_delegates_text_to_environment() {
         let mem = InMemoryEnvironment::new(LoggingLevel::Standard);
         let agent = Agent {
             name: String::from("a"),
-            message: String::from("hello"),
             environment: mem,
+            llm: StubLlm,
         };
-        agent.print();
+        agent.print("hello");
         assert_eq!(
             agent
                 .environment
                 .lines(),
             vec![String::from("hello")]
+        );
+    }
+
+    #[test]
+    fn agent_receive_message_prints_llm_reply_via_environment() {
+        let mem = InMemoryEnvironment::new(LoggingLevel::Standard);
+        let agent = Agent {
+            name: String::from("a"),
+            environment: mem,
+            llm: StubLlm,
+        };
+        agent.receive_message("ping");
+        assert_eq!(
+            agent
+                .environment
+                .lines(),
+            vec![format!("a -> {}", STUB_LLM_REPLY)]
         );
     }
 }
