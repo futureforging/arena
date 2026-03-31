@@ -27,6 +27,9 @@ fn main() {
         },
     };
     let llm = ClaudeLlm::new(api_key, Some(SYSTEM_PROMPT.to_string()));
+    let static_claude_config = llm
+        .static_config_json()
+        .to_owned();
     let agent = create_agent(
         "Aria",
         ShellEnvironment {
@@ -34,5 +37,6 @@ fn main() {
         },
         llm,
     );
+    agent.log(&static_claude_config, LogMessageLevel::Verbose);
     agent.receive_message("What is the capital of France?");
 }

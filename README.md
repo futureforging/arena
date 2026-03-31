@@ -4,7 +4,7 @@ A Rust proof-of-concept binary. The codebase is a minimal starting point: **`cor
 
 ## Current behavior
 
-- Running the binary uses **`LoggingLevel::None`**: no stderr lines on success (all **`Environment::log`** output is filtered). If the API key file is missing or invalid, **`main`** prints to stderr and exits with code **1**. Otherwise one stdout line from **`receive_message`**: **`Aria -> …`** with the model’s reply (**`ClaudeLlm`**; **`ShellEnvironment`**).
+- Running the binary uses **`LoggingLevel::None`**: no stderr lines on success (all **`Environment::log`** output is filtered). If the API key file is missing or invalid, **`main`** prints to stderr and exits with code **1**. Otherwise one stdout line from **`receive_message`**: **`Aria -> …`** with the model’s reply (**`ClaudeLlm`**; **`ShellEnvironment`**). With **`LoggingLevel::Verbose`**, stderr also shows a pretty-printed static snapshot from **`ClaudeLlm::static_config_json`** (model, **`max_tokens`**, optional **`system`** only—not the per-request **`messages`** body).
 - Unit tests cover construction, `print` / `receive_message` delegation, and hierarchical logging in **`core/environment.rs`** (`log_message_is_allowed` and default `Environment::log`).
 
 ## Requirements

@@ -19,12 +19,17 @@ pub struct ClaudeLlm {
     client: reqwest::blocking::Client,
     model: String,
     system_prompt: Option<String>,
+    /// Pretty-printed JSON of fixed request fields (`model`, `max_tokens`, optional `system`).
+    /// Omits per-turn `messages` and secrets; useful for quick setup inspection (may be removed later).
+    static_config_json: String,
 }
 
 impl ClaudeLlm {
     /// Creates a client. Pass [`None`] for `system_prompt` to omit the API `system` field (unusual).
     pub fn new(api_key: impl Into<String>, system_prompt: Option<String>) -> Self {
         let api_key = api_key.into();
+        let model = DEFAULT_MODEL.to_string();
+        let static_config_json = format_static_config_json(&model, system_prompt.as_deref());
         let client = reqwest::blocking::Client::builder()
             .timeout(REQUEST_TIMEOUT)
             .build()
@@ -32,9 +37,16 @@ impl ClaudeLlm {
         Self {
             api_key,
             client,
-            model: DEFAULT_MODEL.to_string(),
+            model,
             system_prompt,
+            static_config_json,
         }
+    }
+
+    /// Fixed Messages API fields used on every call (`model`, `max_tokens`, optional `system`), pretty-printed.
+    /// Does not include per-request `messages` or the API key.
+    pub fn static_config_json(&self) -> &str {
+        &self.static_config_json
     }
 
     fn complete_message(&self, user_message: &str) -> Result<String, String> {
@@ -83,6 +95,16 @@ impl ClaudeLlm {
 
         Ok(out)
     }
+}
+
+fn format_static_config_json(model: &str, system_prompt: Option<&str>) -> String {
+    let mut body = Map::new();
+    body.insert("model".to_string(), json!(model));
+    body.insert("max_tokens".to_string(), json!(MAX_TOKENS));
+    if let Some(system) = system_prompt {
+        body.insert("system".to_string(), json!(system));
+    }
+    serde_json::to_string_pretty(&Value::Object(body)).unwrap_or_else(|_| "{}".to_string())
 }
 
 fn append_text_block(block: &serde_json::Value, out: &mut String) {
