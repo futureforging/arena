@@ -1,7 +1,6 @@
 use std::time::Duration;
 
-use anthropic_api_key_from_local_file::{anthropic_api_key_from_local_file, AnthropicApiKeyError};
-use serde_json::json;
+use serde_json::{json, Map, Value};
 
 use crate::core::llm::Llm;
 
@@ -12,23 +11,19 @@ const DEFAULT_MODEL: &str = "claude-sonnet-4-6";
 const MAX_TOKENS: u32 = 4096;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// Calls the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) using an API key from
-/// [`anthropic_api_key_from_local_file`] (default path) or from [`ClaudeLlm::from_api_key`].
+/// Calls the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages).
+///
+/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. `anthropic_api_key_from_local_file` in the workspace `tools` crate), then pass the key and an optional system prompt.
 pub struct ClaudeLlm {
     api_key: String,
     client: reqwest::blocking::Client,
     model: String,
+    system_prompt: Option<String>,
 }
 
 impl ClaudeLlm {
-    /// Builds a client using the key returned by [`anthropic_api_key_from_local_file`](`None`).
-    pub fn load_from_default_key_file() -> Result<Self, AnthropicApiKeyError> {
-        let api_key = anthropic_api_key_from_local_file(None)?;
-        Ok(Self::from_api_key(api_key))
-    }
-
-    /// Builds a client with an explicit API key (e.g. from tests or another secret source).
-    pub fn from_api_key(api_key: impl Into<String>) -> Self {
+    /// Creates a client. Pass [`None`] for `system_prompt` to omit the API `system` field (unusual).
+    pub fn new(api_key: impl Into<String>, system_prompt: Option<String>) -> Self {
         let api_key = api_key.into();
         let client = reqwest::blocking::Client::builder()
             .timeout(REQUEST_TIMEOUT)
@@ -38,17 +33,19 @@ impl ClaudeLlm {
             api_key,
             client,
             model: DEFAULT_MODEL.to_string(),
+            system_prompt,
         }
     }
 
     fn complete_message(&self, user_message: &str) -> Result<String, String> {
-        let body = json!({
-            "model": self.model,
-            "max_tokens": MAX_TOKENS,
-            "messages": [
-                { "role": "user", "content": user_message }
-            ]
-        });
+        let mut body = Map::new();
+        body.insert("model".to_string(), json!(self.model));
+        body.insert("max_tokens".to_string(), json!(MAX_TOKENS));
+        body.insert("messages".to_string(), json!([{ "role": "user", "content": user_message }]));
+        if let Some(ref system) = self.system_prompt {
+            body.insert("system".to_string(), json!(system));
+        }
+        let body = Value::Object(body);
 
         let response = self
             .client
