@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-claude-agent = "0.2.25"
+anthropic-api-key-from-local-file = { path = "tools" }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+serde_json = "1"
 
 [workspace]
 members = ["tools"]

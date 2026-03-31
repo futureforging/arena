@@ -9,15 +9,25 @@ pub use core::{
 };
 
 pub use application::factories::create_agent::create_agent;
-pub use infrastructure::adapters::{environment::ShellEnvironment, llm::DummyLlm};
+pub use infrastructure::adapters::{
+    environment::ShellEnvironment,
+    llm::{ClaudeLlm, DummyLlm},
+};
 
 fn main() {
+    let llm = match ClaudeLlm::load_from_default_key_file() {
+        Ok(llm) => llm,
+        Err(e) => {
+            eprintln!("Failed to load Anthropic API key: {e}");
+            std::process::exit(1);
+        },
+    };
     let agent = create_agent(
         "Aria",
         ShellEnvironment {
             logging_level: LoggingLevel::None,
         },
-        DummyLlm,
+        llm,
     );
-    agent.receive_message("Example user message");
+    agent.receive_message("What is the capital of France?");
 }
