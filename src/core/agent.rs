@@ -1,4 +1,4 @@
-use super::environment::Environment;
+use super::environment::{Environment, LogMessageLevel};
 
 /// An autonomous agent identified by name and carrying a message.
 pub struct Agent<E: Environment> {
@@ -16,30 +16,34 @@ impl<E: Environment> Agent<E> {
         self.environment
             .print(&self.message);
     }
+
+    /// Logs `message` at `level` through its [`environment`](Agent::environment).
+    pub fn log(&self, message: &str, level: LogMessageLevel) {
+        self.environment
+            .log(message, level);
+    }
 }
 
 #[cfg(test)]
 mod in_memory_environment {
     use std::cell::RefCell;
 
-    use crate::core::environment::Environment;
+    use crate::core::environment::{Environment, LoggingLevel};
 
-    /// Records [`Environment::print`](Environment::print) calls in memory (e.g. for tests).
+    /// Records [`Environment::print`](Environment::print) and [`Environment::log`](Environment::log) in memory (e.g. for tests).
     pub struct InMemoryEnvironment {
         lines: RefCell<Vec<String>>,
-    }
-
-    impl Default for InMemoryEnvironment {
-        fn default() -> Self {
-            Self {
-                lines: RefCell::new(Vec::new()),
-            }
-        }
+        log_lines: RefCell<Vec<String>>,
+        pub logging_level: LoggingLevel,
     }
 
     impl InMemoryEnvironment {
-        pub fn new() -> Self {
-            Self::default()
+        pub fn new(logging_level: LoggingLevel) -> Self {
+            Self {
+                lines: RefCell::new(Vec::new()),
+                log_lines: RefCell::new(Vec::new()),
+                logging_level,
+            }
         }
 
         /// Returns a copy of every string passed to [`Environment::print`](Environment::print).
@@ -56,16 +60,27 @@ mod in_memory_environment {
                 .borrow_mut()
                 .push(s.to_string());
         }
+
+        fn logging_level(&self) -> LoggingLevel {
+            self.logging_level
+        }
+
+        fn emit_log(&self, message: &str) {
+            self.log_lines
+                .borrow_mut()
+                .push(message.to_string());
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{in_memory_environment::InMemoryEnvironment, Agent};
+    use crate::core::environment::LoggingLevel;
 
     #[test]
     fn agent_print_delegates_message_to_environment() {
-        let mem = InMemoryEnvironment::new();
+        let mem = InMemoryEnvironment::new(LoggingLevel::Standard);
         let agent = Agent {
             name: String::from("a"),
             message: String::from("hello"),

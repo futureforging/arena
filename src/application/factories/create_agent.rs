@@ -16,12 +16,18 @@ pub fn create_agent<E: Environment>(
 #[cfg(test)]
 mod tests {
     use super::create_agent;
-    use crate::core::environment::Environment;
+    use crate::core::environment::{Environment, LoggingLevel};
 
     struct NoopEnvironment;
 
     impl Environment for NoopEnvironment {
         fn print(&self, _s: &str) {}
+
+        fn logging_level(&self) -> LoggingLevel {
+            LoggingLevel::None
+        }
+
+        fn emit_log(&self, _message: &str) {}
     }
 
     #[test]
