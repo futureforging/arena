@@ -14,17 +14,21 @@ A Rust proof-of-concept binary. The codebase is a minimal starting point: **`cor
 ## Build and run
 
 ```sh
-cargo build
+cargo build --workspace
 cargo run
 ```
+
+## Workspace
+
+The root [`Cargo.toml`](Cargo.toml) is a **Cargo workspace**: the **`aria-poc-2`** package and **`tools`** ([`anthropic-api-key-from-local-file`](tools/Cargo.toml)). The root package is a workspace member automatically; **`members = ["tools"]`** adds the tools crate.
 
 ## Checks
 
 ```sh
 cargo fmt
-cargo clippy
-cargo build
-cargo test
+cargo clippy --workspace
+cargo build --workspace
+cargo test --workspace
 ```
 
 ## API keys

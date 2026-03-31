@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+claude-agent = "0.2.25"
+
+[workspace]
+members = ["tools"]
+resolver = "2"
