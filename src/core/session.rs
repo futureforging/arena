@@ -69,3 +69,27 @@ pub fn merge_system_prompts(base: Option<&str>, session_system: &str) -> Option<
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::merge_system_prompts;
+
+    #[test]
+    fn merge_system_prompts_covers_base_and_session_combinations() {
+        let cases: &[(Option<&str>, &str, Option<&str>)] = &[
+            (None, "", None),
+            (None, "session-only", Some("session-only")),
+            (Some(""), "", None),
+            (Some(""), "session-only", Some("session-only")),
+            (Some("base"), "", Some("base")),
+            (Some("base"), "session", Some("base\n\nsession")),
+        ];
+        for &(base, session_system, want) in cases {
+            assert_eq!(
+                merge_system_prompts(base, session_system),
+                want.map(String::from),
+                "merge_system_prompts({base:?}, {session_system:?})",
+            );
+        }
+    }
+}

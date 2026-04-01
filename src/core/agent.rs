@@ -123,14 +123,24 @@ impl<E: Environment, L: Llm> Agent<E, L> {
 }
 
 #[cfg(test)]
-mod in_memory_environment {
+mod test_support {
     use std::cell::RefCell;
 
-    use crate::core::environment::{Environment, LoggingLevel};
+    use super::Agent;
+    use crate::core::{
+        environment::{Environment, LoggingLevel},
+        llm::{ChatMessage, Llm, LlmCompletion},
+    };
 
-    /// Records [`Environment::print`](Environment::print) in memory (e.g. for tests). [`Environment::log`](Environment::log) is accepted but not stored.
+    /// Reply returned by [`StubLlm`]; only used to assert the agent prints whatever the port returns.
+    pub const STUB_LLM_REPLY: &str = "stub-llm-reply";
+
+    pub const STUB_REQUEST_JSON: &str = r#"{"logged":"request"}"#;
+
+    /// Records [`Environment::print`](Environment::print) and, after [`Environment::log`](Environment::log) filtering, every string passed to [`Environment::emit_log`](Environment::emit_log).
     pub struct InMemoryEnvironment {
         lines: RefCell<Vec<String>>,
+        logged: RefCell<Vec<String>>,
         pub logging_level: LoggingLevel,
     }
 
@@ -138,6 +148,7 @@ mod in_memory_environment {
         pub fn new(logging_level: LoggingLevel) -> Self {
             Self {
                 lines: RefCell::new(Vec::new()),
+                logged: RefCell::new(Vec::new()),
                 logging_level,
             }
         }
@@ -145,6 +156,13 @@ mod in_memory_environment {
         /// Returns a copy of every string passed to [`Environment::print`](Environment::print).
         pub fn lines(&self) -> Vec<String> {
             self.lines
+                .borrow()
+                .clone()
+        }
+
+        /// Returns a copy of every string passed to [`Environment::emit_log`](Environment::emit_log) via [`Environment::log`](Environment::log).
+        pub fn logged_lines(&self) -> Vec<String> {
+            self.logged
                 .borrow()
                 .clone()
         }
@@ -161,41 +179,100 @@ mod in_memory_environment {
             self.logging_level
         }
 
-        fn emit_log(&self, _message: &str) {}
+        fn emit_log(&self, message: &str) {
+            self.logged
+                .borrow_mut()
+                .push(message.to_string());
+        }
+    }
+
+    pub struct StubLlm {
+        reply: String,
+        request_body_json: Option<String>,
+        base_prompt: Option<String>,
+        last_complete: RefCell<Option<(Option<String>, Vec<ChatMessage>)>>,
+    }
+
+    impl Default for StubLlm {
+        fn default() -> Self {
+            Self {
+                reply: STUB_LLM_REPLY.to_string(),
+                request_body_json: None,
+                base_prompt: None,
+                last_complete: RefCell::new(None),
+            }
+        }
+    }
+
+    impl StubLlm {
+        pub fn with_request_json(json: impl Into<String>) -> Self {
+            Self {
+                request_body_json: Some(json.into()),
+                ..Default::default()
+            }
+        }
+
+        pub fn with_base_prompt(s: impl Into<String>) -> Self {
+            Self {
+                base_prompt: Some(s.into()),
+                ..Default::default()
+            }
+        }
+
+        pub fn last_complete(&self) -> (Option<String>, Vec<ChatMessage>) {
+            self.last_complete
+                .borrow()
+                .clone()
+                .expect("complete was called")
+        }
+    }
+
+    impl Llm for StubLlm {
+        fn base_system_prompt(&self) -> Option<&str> {
+            self.base_prompt
+                .as_deref()
+        }
+
+        fn complete(&self, system: Option<&str>, messages: &[ChatMessage]) -> LlmCompletion {
+            *self
+                .last_complete
+                .borrow_mut() = Some((system.map(str::to_string), messages.to_vec()));
+            LlmCompletion {
+                reply: self
+                    .reply
+                    .clone(),
+                request_body_json: self
+                    .request_body_json
+                    .clone(),
+            }
+        }
+    }
+
+    pub fn agent_with_stub() -> Agent<InMemoryEnvironment, StubLlm> {
+        Agent {
+            name: String::from("a"),
+            environment: InMemoryEnvironment::new(LoggingLevel::Standard),
+            llm: StubLlm::default(),
+            active_session: None,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{in_memory_environment::InMemoryEnvironment, Agent};
+    use super::{
+        test_support::{
+            agent_with_stub, InMemoryEnvironment, StubLlm, STUB_LLM_REPLY, STUB_REQUEST_JSON,
+        },
+        Agent,
+    };
     use crate::core::{
         environment::LoggingLevel,
-        llm::{ChatMessage, LlmCompletion},
-        session::{ReceiveMessageError, Session, StartSessionError, ASSISTANT_ROLE, USER_ROLE},
+        session::{
+            merge_system_prompts, ReceiveMessageError, Session, StartSessionError, ASSISTANT_ROLE,
+            USER_ROLE,
+        },
     };
-
-    /// Reply returned by [`StubLlm`]; only used to assert the agent prints whatever the port returns.
-    const STUB_LLM_REPLY: &str = "stub-llm-reply";
-
-    struct StubLlm;
-
-    impl crate::core::llm::Llm for StubLlm {
-        fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> LlmCompletion {
-            LlmCompletion {
-                reply: STUB_LLM_REPLY.to_string(),
-                request_body_json: None,
-            }
-        }
-    }
-
-    fn agent_with_stub() -> Agent<InMemoryEnvironment, StubLlm> {
-        Agent {
-            name: String::from("a"),
-            environment: InMemoryEnvironment::new(LoggingLevel::Standard),
-            llm: StubLlm,
-            active_session: None,
-        }
-    }
 
     #[test]
     fn agent_print_delegates_text_to_environment() {
@@ -281,100 +358,114 @@ mod tests {
         assert_eq!(session.transcript[3].role, ASSISTANT_ROLE);
     }
 
-    /// Records [`emit_log`](crate::core::environment::Environment::emit_log) lines for tests.
-    struct RecordingEnvironment {
-        printed: std::cell::RefCell<Vec<String>>,
-        logged: std::cell::RefCell<Vec<String>>,
-        logging_level: LoggingLevel,
+    #[test]
+    fn stop_session_returns_none_when_no_active_session() {
+        let mut agent = agent_with_stub();
+        assert_eq!(agent.stop_session(), None);
     }
 
-    impl RecordingEnvironment {
-        fn new(logging_level: LoggingLevel) -> Self {
-            Self {
-                printed: std::cell::RefCell::new(Vec::new()),
-                logged: std::cell::RefCell::new(Vec::new()),
-                logging_level,
-            }
-        }
-
-        fn logged_lines(&self) -> Vec<String> {
-            self.logged
-                .borrow()
-                .clone()
-        }
+    #[test]
+    fn stop_session_returns_none_second_time_after_session_taken() {
+        let mut agent = agent_with_stub();
+        agent
+            .start_session(Session::new("s"), ASSISTANT_ROLE, USER_ROLE)
+            .unwrap();
+        assert!(agent
+            .stop_session()
+            .is_some());
+        assert_eq!(agent.stop_session(), None);
     }
 
-    impl crate::core::environment::Environment for RecordingEnvironment {
-        fn print(&self, s: &str) {
-            self.printed
-                .borrow_mut()
-                .push(s.to_string());
-        }
-
-        fn logging_level(&self) -> LoggingLevel {
-            self.logging_level
-        }
-
-        fn emit_log(&self, message: &str) {
-            self.logged
-                .borrow_mut()
-                .push(message.to_string());
-        }
+    #[test]
+    fn receive_message_logs_incoming_message_at_standard() {
+        let mut agent = agent_with_stub();
+        agent
+            .start_session(Session::new("task"), ASSISTANT_ROLE, USER_ROLE)
+            .unwrap();
+        agent
+            .receive_message("ping")
+            .unwrap();
+        assert_eq!(
+            agent
+                .environment
+                .logged_lines(),
+            vec![String::from("a <- ping")]
+        );
     }
 
-    struct StubLlmWithRequestJson;
+    #[test]
+    fn receive_message_passes_merged_system_and_transcript_to_llm() {
+        let mut agent = Agent {
+            name: String::from("a"),
+            environment: InMemoryEnvironment::new(LoggingLevel::Standard),
+            llm: StubLlm::default(),
+            active_session: None,
+        };
+        agent
+            .start_session(Session::new("session-sys"), ASSISTANT_ROLE, USER_ROLE)
+            .unwrap();
+        agent
+            .receive_message("ping")
+            .unwrap();
+        let (system, messages) = agent
+            .llm
+            .last_complete();
+        assert_eq!(system, merge_system_prompts(None, "session-sys"));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].role, USER_ROLE);
+        assert_eq!(messages[0].content, "ping");
+    }
 
-    impl crate::core::llm::Llm for StubLlmWithRequestJson {
-        fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> LlmCompletion {
-            LlmCompletion {
-                reply: STUB_LLM_REPLY.to_string(),
-                request_body_json: Some(r#"{"logged":"request"}"#.to_string()),
-            }
-        }
+    #[test]
+    fn receive_message_passes_merged_base_and_session_system_to_llm() {
+        let mut agent = Agent {
+            name: String::from("a"),
+            environment: InMemoryEnvironment::new(LoggingLevel::Standard),
+            llm: StubLlm::with_base_prompt("adapter-base"),
+            active_session: None,
+        };
+        agent
+            .start_session(Session::new("session"), ASSISTANT_ROLE, USER_ROLE)
+            .unwrap();
+        agent
+            .receive_message("x")
+            .unwrap();
+        let (system, _) = agent
+            .llm
+            .last_complete();
+        assert_eq!(system, merge_system_prompts(Some("adapter-base"), "session"));
     }
 
     #[test]
     fn receive_message_logs_request_body_json_at_verbose_only() {
-        let mut agent = Agent {
-            name: String::from("a"),
-            environment: RecordingEnvironment::new(LoggingLevel::Verbose),
-            llm: StubLlmWithRequestJson,
-            active_session: None,
-        };
-        agent
-            .start_session(Session::new("t"), ASSISTANT_ROLE, USER_ROLE)
-            .unwrap();
-        agent
-            .receive_message("hi")
-            .unwrap();
-        assert!(
+        let cases: &[(LoggingLevel, &[&str])] = &[
+            (LoggingLevel::Verbose, &["a <- hi", STUB_REQUEST_JSON]),
+            (LoggingLevel::Standard, &["a <- hi"]),
+        ];
+        for &(level, expected) in cases {
+            let mut agent = Agent {
+                name: String::from("a"),
+                environment: InMemoryEnvironment::new(level),
+                llm: StubLlm::with_request_json(STUB_REQUEST_JSON),
+                active_session: None,
+            };
             agent
-                .environment
-                .logged_lines()
+                .start_session(Session::new("t"), ASSISTANT_ROLE, USER_ROLE)
+                .unwrap();
+            agent
+                .receive_message("hi")
+                .unwrap();
+            let expected: Vec<String> = expected
                 .iter()
-                .any(|line| line.contains("logged") && line.contains("request")),
-            "expected verbose request JSON in emit_log"
-        );
-
-        let mut agent_standard = Agent {
-            name: String::from("a"),
-            environment: RecordingEnvironment::new(LoggingLevel::Standard),
-            llm: StubLlmWithRequestJson,
-            active_session: None,
-        };
-        agent_standard
-            .start_session(Session::new("t"), ASSISTANT_ROLE, USER_ROLE)
-            .unwrap();
-        agent_standard
-            .receive_message("hi")
-            .unwrap();
-        assert!(
-            !agent_standard
-                .environment
-                .logged_lines()
-                .iter()
-                .any(|line| line.contains("\"logged\"")),
-            "standard level must not emit verbose request-body log"
-        );
+                .copied()
+                .map(String::from)
+                .collect();
+            assert_eq!(
+                agent
+                    .environment
+                    .logged_lines(),
+                expected
+            );
+        }
     }
 }
