@@ -1,22 +1,22 @@
-use std::time::Duration;
-
 use serde_json::{json, Map, Value};
 
-use crate::core::llm::{ChatMessage, Llm, LlmCompletion};
+use crate::{
+    core::llm::{ChatMessage, Llm, LlmCompletion},
+    infrastructure::adapters::transport::JsonHttp,
+};
 
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 // Model alias from Anthropic; update if the API returns 404 for `model`.
 const DEFAULT_MODEL: &str = "claude-sonnet-4-6";
 const MAX_TOKENS: u32 = 4096;
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Calls the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages).
 ///
 /// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. `anthropic_api_key_from_local_file` in the workspace `tools` crate), then pass the key and an optional **base** system prompt (merged per request with the session system prompt).
 pub struct ClaudeLlm {
     api_key: String,
-    client: reqwest::blocking::Client,
+    http: JsonHttp,
     model: String,
     system_prompt: Option<String>,
 }
@@ -26,13 +26,10 @@ impl ClaudeLlm {
     pub fn new(api_key: impl Into<String>, system_prompt: Option<String>) -> Self {
         let api_key = api_key.into();
         let model = DEFAULT_MODEL.to_string();
-        let client = reqwest::blocking::Client::builder()
-            .timeout(REQUEST_TIMEOUT)
-            .build()
-            .unwrap_or_else(|_| reqwest::blocking::Client::new());
+        let http = JsonHttp::new();
         Self {
             api_key,
-            client,
+            http,
             model,
             system_prompt,
         }
@@ -63,25 +60,18 @@ impl ClaudeLlm {
     }
 
     fn post_messages_request(&self, body: &Value) -> Result<String, String> {
-        let response = self
-            .client
-            .post(ANTHROPIC_MESSAGES_URL)
-            .header("x-api-key", &self.api_key)
-            .header("anthropic-version", ANTHROPIC_VERSION)
-            .header("content-type", "application/json")
-            .json(body)
-            .send()
-            .map_err(|e| e.to_string())?;
-
-        let status = response.status();
-        let bytes = response
-            .bytes()
-            .map_err(|e| e.to_string())?;
-
-        if !status.is_success() {
-            let text = String::from_utf8_lossy(&bytes);
-            return Err(format!("HTTP {status}: {text}"));
-        }
+        let headers = [
+            (
+                "x-api-key",
+                self.api_key
+                    .as_str(),
+            ),
+            ("anthropic-version", ANTHROPIC_VERSION),
+            ("content-type", "application/json"),
+        ];
+        let bytes = self
+            .http
+            .post_json(ANTHROPIC_MESSAGES_URL, &headers, body)?;
 
         let v: serde_json::Value =
             serde_json::from_slice(&bytes).map_err(|e| format!("invalid JSON: {e}"))?;
