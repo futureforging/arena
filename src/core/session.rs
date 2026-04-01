@@ -74,9 +74,11 @@ pub fn merge_system_prompts(base: Option<&str>, session_system: &str) -> Option<
 mod tests {
     use super::merge_system_prompts;
 
+    type MergeSystemPromptCase<'a> = (Option<&'a str>, &'a str, Option<&'a str>);
+
     #[test]
     fn merge_system_prompts_covers_base_and_session_combinations() {
-        let cases: &[(Option<&str>, &str, Option<&str>)] = &[
+        let cases: &[MergeSystemPromptCase<'_>] = &[
             (None, "", None),
             (None, "session-only", Some("session-only")),
             (Some(""), "", None),

@@ -137,6 +137,9 @@ mod test_support {
 
     pub const STUB_REQUEST_JSON: &str = r#"{"logged":"request"}"#;
 
+    /// Arguments captured by [`StubLlm`] on the last [`Llm::complete`](Llm::complete) call.
+    type StubCompleteInputs = (Option<String>, Vec<ChatMessage>);
+
     /// Records [`Environment::print`](Environment::print) and, after [`Environment::log`](Environment::log) filtering, every string passed to [`Environment::emit_log`](Environment::emit_log).
     pub struct InMemoryEnvironment {
         lines: RefCell<Vec<String>>,
@@ -190,7 +193,7 @@ mod test_support {
         reply: String,
         request_body_json: Option<String>,
         base_prompt: Option<String>,
-        last_complete: RefCell<Option<(Option<String>, Vec<ChatMessage>)>>,
+        last_complete: RefCell<Option<StubCompleteInputs>>,
     }
 
     impl Default for StubLlm {
@@ -219,7 +222,7 @@ mod test_support {
             }
         }
 
-        pub fn last_complete(&self) -> (Option<String>, Vec<ChatMessage>) {
+        pub fn last_complete(&self) -> StubCompleteInputs {
             self.last_complete
                 .borrow()
                 .clone()
@@ -273,6 +276,9 @@ mod tests {
             USER_ROLE,
         },
     };
+
+    type ExpectedLoggedLines = &'static [&'static str];
+    type VerboseLoggingCase = (LoggingLevel, ExpectedLoggedLines);
 
     #[test]
     fn agent_print_delegates_text_to_environment() {
@@ -438,7 +444,7 @@ mod tests {
 
     #[test]
     fn receive_message_logs_request_body_json_at_verbose_only() {
-        let cases: &[(LoggingLevel, &[&str])] = &[
+        let cases: &[VerboseLoggingCase] = &[
             (LoggingLevel::Verbose, &["a <- hi", STUB_REQUEST_JSON]),
             (LoggingLevel::Standard, &["a <- hi"]),
         ];
