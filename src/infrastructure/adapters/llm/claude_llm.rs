@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
-use crate::core::llm::Llm;
+use crate::core::llm::{ChatMessage, Llm};
 
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -13,19 +13,19 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Calls the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages).
 ///
-/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. `anthropic_api_key_from_local_file` in the workspace `tools` crate), then pass the key and an optional system prompt.
+/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. `anthropic_api_key_from_local_file` in the workspace `tools` crate), then pass the key and an optional **base** system prompt (merged per request with the session system prompt).
 pub struct ClaudeLlm {
     api_key: String,
     client: reqwest::blocking::Client,
     model: String,
     system_prompt: Option<String>,
-    /// Pretty-printed JSON of fixed request fields (`model`, `max_tokens`, optional `system`).
+    /// Pretty-printed JSON of fixed request fields (`model`, `max_tokens`, optional base `system`).
     /// Omits per-turn `messages` and secrets; useful for quick setup inspection (may be removed later).
     static_config_json: String,
 }
 
 impl ClaudeLlm {
-    /// Creates a client. Pass [`None`] for `system_prompt` to omit the API `system` field (unusual).
+    /// Creates a client. Pass [`None`] for `system_prompt` to omit a base system block when merging (unusual).
     pub fn new(api_key: impl Into<String>, system_prompt: Option<String>) -> Self {
         let api_key = api_key.into();
         let model = DEFAULT_MODEL.to_string();
@@ -43,19 +43,30 @@ impl ClaudeLlm {
         }
     }
 
-    /// Fixed Messages API fields used on every call (`model`, `max_tokens`, optional `system`), pretty-printed.
+    /// Fixed Messages API fields used on every call (`model`, `max_tokens`, optional base `system`), pretty-printed.
     /// Does not include per-request `messages` or the API key.
     pub fn static_config_json(&self) -> &str {
         &self.static_config_json
     }
 
-    fn complete_message(&self, user_message: &str) -> Result<String, String> {
+    fn complete_messages(
+        &self,
+        system: Option<&str>,
+        messages: &[ChatMessage],
+    ) -> Result<String, String> {
+        let json_messages: Vec<Value> = messages
+            .iter()
+            .map(|m| json!({ "role": m.role, "content": m.content }))
+            .collect();
+
         let mut body = Map::new();
         body.insert("model".to_string(), json!(self.model));
         body.insert("max_tokens".to_string(), json!(MAX_TOKENS));
-        body.insert("messages".to_string(), json!([{ "role": "user", "content": user_message }]));
-        if let Some(ref system) = self.system_prompt {
-            body.insert("system".to_string(), json!(system));
+        body.insert("messages".to_string(), Value::Array(json_messages));
+        if let Some(s) = system {
+            if !s.is_empty() {
+                body.insert("system".to_string(), json!(s));
+            }
         }
         let body = Value::Object(body);
 
@@ -117,8 +128,13 @@ fn append_text_block(block: &serde_json::Value, out: &mut String) {
 }
 
 impl Llm for ClaudeLlm {
-    fn receive_message(&self, message: &str) -> String {
-        match self.complete_message(message) {
+    fn base_system_prompt(&self) -> Option<&str> {
+        self.system_prompt
+            .as_deref()
+    }
+
+    fn complete(&self, system: Option<&str>, messages: &[ChatMessage]) -> String {
+        match self.complete_messages(system, messages) {
             Ok(text) => text,
             Err(e) => format!("(anthropic error) {e}"),
         }

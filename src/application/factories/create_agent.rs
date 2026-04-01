@@ -10,6 +10,7 @@ pub fn create_agent<E: Environment, L: Llm>(
         name: name.into(),
         environment,
         llm,
+        active_session: None,
     }
 }
 
@@ -18,13 +19,13 @@ mod tests {
     use super::create_agent;
     use crate::core::{
         environment::{Environment, LoggingLevel},
-        llm::Llm,
+        llm::{ChatMessage, Llm},
     };
 
     struct StubLlm;
 
     impl Llm for StubLlm {
-        fn receive_message(&self, _message: &str) -> String {
+        fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> String {
             String::new()
         }
     }

@@ -1,4 +1,4 @@
-use crate::core::llm::Llm;
+use crate::core::llm::{ChatMessage, Llm};
 
 const DUMMY_LLM_RESPONSE: &str = "Paris is the capital of France.";
 
@@ -20,7 +20,7 @@ impl Default for DummyLlm {
 }
 
 impl Llm for DummyLlm {
-    fn receive_message(&self, _message: &str) -> String {
+    fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> String {
         DUMMY_LLM_RESPONSE.to_string()
     }
 }
