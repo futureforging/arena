@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
-use crate::core::llm::{ChatMessage, Llm};
+use crate::core::llm::{ChatMessage, Llm, LlmCompletion};
 
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -19,9 +19,6 @@ pub struct ClaudeLlm {
     client: reqwest::blocking::Client,
     model: String,
     system_prompt: Option<String>,
-    /// Pretty-printed JSON of fixed request fields (`model`, `max_tokens`, optional base `system`).
-    /// Omits per-turn `messages` and secrets; useful for quick setup inspection (may be removed later).
-    static_config_json: String,
 }
 
 impl ClaudeLlm {
@@ -29,7 +26,6 @@ impl ClaudeLlm {
     pub fn new(api_key: impl Into<String>, system_prompt: Option<String>) -> Self {
         let api_key = api_key.into();
         let model = DEFAULT_MODEL.to_string();
-        let static_config_json = format_static_config_json(&model, system_prompt.as_deref());
         let client = reqwest::blocking::Client::builder()
             .timeout(REQUEST_TIMEOUT)
             .build()
@@ -39,44 +35,41 @@ impl ClaudeLlm {
             client,
             model,
             system_prompt,
-            static_config_json,
         }
     }
 
-    /// Fixed Messages API fields used on every call (`model`, `max_tokens`, optional base `system`), pretty-printed.
-    /// Does not include per-request `messages` or the API key.
-    pub fn static_config_json(&self) -> &str {
-        &self.static_config_json
-    }
-
-    fn complete_messages(
+    fn build_request_body(
         &self,
         system: Option<&str>,
         messages: &[ChatMessage],
-    ) -> Result<String, String> {
+    ) -> (Value, Option<String>) {
         let json_messages: Vec<Value> = messages
             .iter()
             .map(|m| json!({ "role": m.role, "content": m.content }))
             .collect();
 
-        let mut body = Map::new();
-        body.insert("model".to_string(), json!(self.model));
-        body.insert("max_tokens".to_string(), json!(MAX_TOKENS));
-        body.insert("messages".to_string(), Value::Array(json_messages));
+        let mut map = Map::new();
+        map.insert("model".to_string(), json!(self.model));
+        map.insert("max_tokens".to_string(), json!(MAX_TOKENS));
+        map.insert("messages".to_string(), Value::Array(json_messages));
         if let Some(s) = system {
             if !s.is_empty() {
-                body.insert("system".to_string(), json!(s));
+                map.insert("system".to_string(), json!(s));
             }
         }
-        let body = Value::Object(body);
+        let body = Value::Object(map);
+        let pretty = serde_json::to_string_pretty(&body).ok();
+        (body, pretty)
+    }
 
+    fn post_messages_request(&self, body: &Value) -> Result<String, String> {
         let response = self
             .client
             .post(ANTHROPIC_MESSAGES_URL)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", ANTHROPIC_VERSION)
             .header("content-type", "application/json")
-            .json(&body)
+            .json(body)
             .send()
             .map_err(|e| e.to_string())?;
 
@@ -108,16 +101,6 @@ impl ClaudeLlm {
     }
 }
 
-fn format_static_config_json(model: &str, system_prompt: Option<&str>) -> String {
-    let mut body = Map::new();
-    body.insert("model".to_string(), json!(model));
-    body.insert("max_tokens".to_string(), json!(MAX_TOKENS));
-    if let Some(system) = system_prompt {
-        body.insert("system".to_string(), json!(system));
-    }
-    serde_json::to_string_pretty(&Value::Object(body)).unwrap_or_else(|_| "{}".to_string())
-}
-
 fn append_text_block(block: &serde_json::Value, out: &mut String) {
     if block["type"].as_str() != Some("text") {
         return;
@@ -133,10 +116,17 @@ impl Llm for ClaudeLlm {
             .as_deref()
     }
 
-    fn complete(&self, system: Option<&str>, messages: &[ChatMessage]) -> String {
-        match self.complete_messages(system, messages) {
-            Ok(text) => text,
-            Err(e) => format!("(anthropic error) {e}"),
+    fn complete(&self, system: Option<&str>, messages: &[ChatMessage]) -> LlmCompletion {
+        let (body, request_body_json) = self.build_request_body(system, messages);
+        match self.post_messages_request(&body) {
+            Ok(text) => LlmCompletion {
+                reply: text,
+                request_body_json,
+            },
+            Err(e) => LlmCompletion {
+                reply: format!("(anthropic error) {e}"),
+                request_body_json,
+            },
         }
     }
 }

@@ -5,7 +5,7 @@ mod infrastructure;
 pub use core::{
     agent::Agent,
     environment::{log_message_is_allowed, Environment, LogMessageLevel, LoggingLevel},
-    llm::{ChatMessage, Llm},
+    llm::{ChatMessage, Llm, LlmCompletion},
     session::{
         merge_system_prompts, ActiveSession, ReceiveMessageError, Session, StartSessionError,
         ASSISTANT_ROLE, USER_ROLE,
@@ -35,17 +35,14 @@ fn main() {
         },
     };
     let llm = ClaudeLlm::new(api_key, Some(BASE_SYSTEM_PROMPT.to_string()));
-    let static_claude_config = llm
-        .static_config_json()
-        .to_owned();
+
     let mut agent = create_agent(
         "Aria",
         ShellEnvironment {
-            logging_level: LoggingLevel::None,
+            logging_level: LoggingLevel::Standard,
         },
         llm,
     );
-    agent.log(&static_claude_config, LogMessageLevel::Verbose);
 
     if let Err(e) =
         agent.start_session(Session::new(SESSION_SYSTEM_PROMPT), ASSISTANT_ROLE, USER_ROLE)

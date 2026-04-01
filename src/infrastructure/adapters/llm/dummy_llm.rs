@@ -1,6 +1,6 @@
-use crate::core::llm::{ChatMessage, Llm};
+use crate::core::llm::{ChatMessage, Llm, LlmCompletion};
 
-const DUMMY_LLM_RESPONSE: &str = "Paris is the capital of France.";
+const DUMMY_LLM_RESPONSE: &str = "Hello.";
 
 /// Stub LLM adapter that always replies with [`DUMMY_LLM_RESPONSE`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,7 +20,10 @@ impl Default for DummyLlm {
 }
 
 impl Llm for DummyLlm {
-    fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> String {
-        DUMMY_LLM_RESPONSE.to_string()
+    fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> LlmCompletion {
+        LlmCompletion {
+            reply: DUMMY_LLM_RESPONSE.to_string(),
+            request_body_json: None,
+        }
     }
 }

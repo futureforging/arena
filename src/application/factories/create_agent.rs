@@ -19,14 +19,17 @@ mod tests {
     use super::create_agent;
     use crate::core::{
         environment::{Environment, LoggingLevel},
-        llm::{ChatMessage, Llm},
+        llm::{ChatMessage, Llm, LlmCompletion},
     };
 
     struct StubLlm;
 
     impl Llm for StubLlm {
-        fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> String {
-            String::new()
+        fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> LlmCompletion {
+            LlmCompletion {
+                reply: String::new(),
+                request_body_json: None,
+            }
         }
     }
 
