@@ -1,8 +1,8 @@
 use super::llm::ChatMessage;
 
-/// Canonical transcript role for the human peer.
+/// Transcript role string used for the **peer**’s lines in many provider APIs (e.g. Anthropic Messages `user`).
 pub const USER_ROLE: &str = "user";
-/// Canonical transcript role for the model side of the conversation.
+/// Transcript role string used for this **Agent**’s lines in many provider APIs (e.g. Anthropic Messages `assistant`).
 pub const ASSISTANT_ROLE: &str = "assistant";
 
 /// Session-level instructions and conversation transcript.

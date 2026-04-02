@@ -63,7 +63,7 @@ impl<E: Environment, L: Llm> Agent<E, L> {
             .map(|active| active.session)
     }
 
-    /// Records a peer message, completes with [`Llm::complete`](Llm::complete), logs [`LlmCompletion`](crate::core::llm::LlmCompletion) request JSON at [`LogMessageLevel::Verbose`] when the adapter supplies it and the environment allows verbose logs, then appends the assistant reply and prints it.
+    /// Records a **peer** message, completes with [`Llm::complete`](Llm::complete), logs [`LlmCompletion`](crate::core::llm::LlmCompletion) request JSON at [`LogMessageLevel::Verbose`] when the adapter supplies it and the environment allows verbose logs, then appends this **Agent**’s reply (under [`ActiveSession::agent_role`](crate::core::session::ActiveSession)) and prints it.
     ///
     /// Returns [`ReceiveMessageError::NoActiveSession`] if [`start_session`](Self::start_session) was not called or after [`stop_session`](Self::stop_session).
     pub fn receive_message(&mut self, message: &str) -> Result<String, ReceiveMessageError> {

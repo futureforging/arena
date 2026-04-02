@@ -16,64 +16,72 @@ use anthropic_api_key_from_local_file::anthropic_api_key_from_local_file;
 pub use application::factories::create_agent::create_agent;
 pub use infrastructure::adapters::{
     environment::ShellEnvironment,
-    llm::{ClaudeLlm, DummyLlm, KnockKnockUserLlm},
+    llm::{ClaudeLlm, DummyLlm, KnockKnockAudienceLlm},
 };
 
 /// Base system instructions merged with the per-session prompt on every completion (model-/adapter-level).
-const BASE_SYSTEM_PROMPT: &str = "You are a concise, helpful assistant.";
+const BASE_SYSTEM_PROMPT: &str =
+    "You are telling a knock-knock joke to your peer. Be concise at every step.";
 
-/// User line that starts the scripted knock-knock exchange.
-const KNOCK_KNOCK_OPENER: &str = "Tell me a knock knock joke.";
+/// Synthetic peer line so the joke-telling participant (display name **Agent**) can open the dialogue (see [`KNOCK_KNOCK_TELLER_SESSION_PROMPT`] step 1).
+const SYNTHETIC_PEER_GREETING: &str = "Hello.";
 
-/// Session-scoped instructions for the knock-knock game (merged with [`BASE_SYSTEM_PROMPT`] for each API call).
-const KNOCK_KNOCK_SESSION_PROMPT: &str = r#"You are running a fixed knock-knock joke exchange.
+/// Session-scoped instructions for the joke teller (merged with [`BASE_SYSTEM_PROMPT`] for each API call).
+const KNOCK_KNOCK_TELLER_SESSION_PROMPT: &str = r#"You are running a fixed knock-knock joke exchange. You are the joke teller; your peer is the audience.
 
 Turn order:
-1) The user opens by asking for a joke. Reply with only this on the first line: Knock knock.
-2) The user says "Who's there?". Put the setup name as exactly one word on the first line of your message (no leading label or punctuation before that word). The user will repeat it in "{word} who?".
-3) The user says "{word} who?" using that setup word. Give a short punchline.
-4) The user says "haha". Reply with one brief parting pleasantry only. The scripted exchange ends there.
+1) The peer opens with a brief greeting (e.g. "Hello."). Reply only by asking if they would like to hear a knock knock joke (one short sentence ending with a question mark).
+2) When the peer says "yes", reply with only this on the first line: Knock knock.
+3) When the peer says "Who's there?", put the setup name as exactly one word on the first line of your message (no leading label or punctuation before that word). The peer will say "{word} who?".
+4) When the peer says "{word} who?" using that setup word, give a short punchline.
+5) When the peer says "haha", reply with one brief parting pleasantry only. The scripted exchange ends there.
 
 Be concise at every step."#;
 
 fn play_knock_knock(
-    assistant: &mut Agent<ShellEnvironment, ClaudeLlm>,
-    user: &mut Agent<ShellEnvironment, KnockKnockUserLlm>,
+    peer: &mut Agent<ShellEnvironment, KnockKnockAudienceLlm>,
+    agent: &mut Agent<ShellEnvironment, ClaudeLlm>,
 ) {
-    if let Err(e) =
-        assistant.start_session(Session::new(KNOCK_KNOCK_SESSION_PROMPT), ASSISTANT_ROLE, USER_ROLE)
-    {
-        eprintln!("Failed to start assistant session: {e:?}");
+    // Transcript roles must match Anthropic Messages API: Claude outputs `assistant`, canned lines are `user`,
+    // so each turn ends with `user` before the next completion (see `Agent::receive_message`).
+    if let Err(e) = peer.start_session(Session::new(""), USER_ROLE, ASSISTANT_ROLE) {
+        eprintln!("Failed to start peer session: {e:?}");
         std::process::exit(1);
     }
-    if let Err(e) = user.start_session(Session::new(""), USER_ROLE, ASSISTANT_ROLE) {
-        eprintln!("Failed to start user session: {e:?}");
+    if let Err(e) = agent.start_session(
+        Session::new(KNOCK_KNOCK_TELLER_SESSION_PROMPT),
+        ASSISTANT_ROLE,
+        USER_ROLE,
+    ) {
+        eprintln!("Failed to start agent session: {e:?}");
         std::process::exit(1);
     }
 
-    let mut assistant_recv = |text: &str| -> String {
-        assistant
+    let mut peer_recv = |text: &str| -> String {
+        peer.receive_message(text)
+            .unwrap_or_else(|e| {
+                eprintln!("peer receive_message failed: {e:?}");
+                std::process::exit(1);
+            })
+    };
+    let mut agent_recv = |text: &str| -> String {
+        agent
             .receive_message(text)
             .unwrap_or_else(|e| {
-                eprintln!("assistant receive_message failed: {e:?}");
-                std::process::exit(1);
-            })
-    };
-    let mut user_recv = |text: &str| -> String {
-        user.receive_message(text)
-            .unwrap_or_else(|e| {
-                eprintln!("user receive_message failed: {e:?}");
+                eprintln!("agent receive_message failed: {e:?}");
                 std::process::exit(1);
             })
     };
 
-    let after_opener = assistant_recv(KNOCK_KNOCK_OPENER);
-    let after_whos_there = assistant_recv(&user_recv(&after_opener));
-    let after_setup_who = assistant_recv(&user_recv(&after_whos_there));
-    let _parting = assistant_recv(&user_recv(&after_setup_who));
+    let invitation = agent_recv(SYNTHETIC_PEER_GREETING);
+    let after_yes = peer_recv(&invitation);
+    let after_whos_there = peer_recv(&agent_recv(&after_yes));
+    let after_setup_who = peer_recv(&agent_recv(&after_whos_there));
+    let _haha = peer_recv(&agent_recv(&after_setup_who));
+    let _parting = agent_recv(&_haha);
 
-    let _ = assistant.stop_session();
-    let _ = user.stop_session();
+    let _ = peer.stop_session();
+    let _ = agent.stop_session();
 }
 
 fn main() {
@@ -86,21 +94,21 @@ fn main() {
     };
     let llm = ClaudeLlm::new(api_key, Some(BASE_SYSTEM_PROMPT.to_string()));
 
-    let mut assistant = create_agent(
-        "Assistant",
+    let mut peer = create_agent(
+        "Peer",
+        ShellEnvironment {
+            logging_level: LoggingLevel::None,
+        },
+        KnockKnockAudienceLlm::new(),
+    );
+
+    let mut agent = create_agent(
+        "Agent",
         ShellEnvironment {
             logging_level: LoggingLevel::None,
         },
         llm,
     );
 
-    let mut user = create_agent(
-        "User",
-        ShellEnvironment {
-            logging_level: LoggingLevel::None,
-        },
-        KnockKnockUserLlm::new(),
-    );
-
-    play_knock_knock(&mut assistant, &mut user);
+    play_knock_knock(&mut peer, &mut agent);
 }

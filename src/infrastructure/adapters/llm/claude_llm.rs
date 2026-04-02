@@ -84,7 +84,7 @@ impl ClaudeLlm {
         }
 
         if out.is_empty() {
-            return Err("empty or unrecognized assistant content in response".to_string());
+            return Err("empty or unrecognized text in Messages API response content".to_string());
         }
 
         Ok(out)
