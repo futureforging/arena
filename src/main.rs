@@ -17,13 +17,14 @@ pub use application::factories::create_agent::create_agent;
 pub use infrastructure::adapters::{
     environment::ShellEnvironment,
     llm::{ClaudeLlm, DummyLlm, KnockKnockAudienceLlm},
+    SecureAgent,
 };
 
 /// Base system instructions merged with the per-session prompt on every completion (model-/adapter-level).
 const BASE_SYSTEM_PROMPT: &str =
     "You are telling a knock-knock joke to your peer. Be concise at every step.";
 
-/// Synthetic peer line so the joke-telling participant (display name **Agent**) can open the dialogue (see [`KNOCK_KNOCK_TELLER_SESSION_PROMPT`] step 1).
+/// Synthetic peer line so the joke-telling participant (display name **SecureAgent**) can open the dialogue (see [`KNOCK_KNOCK_TELLER_SESSION_PROMPT`] step 1).
 const SYNTHETIC_PEER_GREETING: &str = "Hello.";
 
 /// Session-scoped instructions for the joke teller (merged with [`BASE_SYSTEM_PROMPT`] for each API call).
@@ -40,7 +41,7 @@ Be concise at every step."#;
 
 fn play_knock_knock(
     peer: &mut Agent<ShellEnvironment, KnockKnockAudienceLlm>,
-    agent: &mut Agent<ShellEnvironment, ClaudeLlm>,
+    agent: &mut SecureAgent,
 ) {
     // Transcript roles must match Anthropic Messages API: Claude outputs `assistant`, canned lines are `user`,
     // so each turn ends with `user` before the next completion (see `Agent::receive_message`).
@@ -92,8 +93,6 @@ fn main() {
             std::process::exit(1);
         },
     };
-    let llm = ClaudeLlm::new(api_key, Some(BASE_SYSTEM_PROMPT.to_string()));
-
     let mut peer = create_agent(
         "Peer",
         ShellEnvironment {
@@ -102,12 +101,12 @@ fn main() {
         KnockKnockAudienceLlm::new(),
     );
 
-    let mut agent = create_agent(
-        "Agent",
+    let mut agent = SecureAgent::new(
+        api_key,
+        Some(BASE_SYSTEM_PROMPT.to_string()),
         ShellEnvironment {
             logging_level: LoggingLevel::None,
         },
-        llm,
     );
 
     play_knock_knock(&mut peer, &mut agent);
