@@ -13,7 +13,7 @@ const MAX_TOKENS: u32 = 4096;
 
 /// Calls the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages).
 ///
-/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. `anthropic_api_key_from_local_file` in the workspace `tools` crate), then pass the key and an optional **base** system prompt (merged per request with the session system prompt).
+/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. [`aria_vault_anthropic_local::anthropic_api_key_from_local_file`]), then pass the key and an optional **base** system prompt (merged per request with the session system prompt).
 pub struct ClaudeLlm {
     api_key: String,
     http: JsonHttp,

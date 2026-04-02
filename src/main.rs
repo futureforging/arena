@@ -12,8 +12,8 @@ pub use core::{
     },
 };
 
-use anthropic_api_key_from_local_file::anthropic_api_key_from_local_file;
 pub use application::factories::create_agent::create_agent;
+use aria_vault_anthropic_local::anthropic_api_key_from_local_file;
 pub use infrastructure::adapters::{
     environment::ShellEnvironment,
     llm::{ClaudeLlm, DummyLlm, KnockKnockAudienceLlm},

@@ -1,0 +1,17 @@
+[package]
+name = "aria-vault-anthropic-local"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Anthropic API key file loader and Omnia wasi-vault backend (local file)."
+
+[dependencies]
+anyhow = "1"
+futures = "0.3"
+omnia = "0.30.0"
+omnia-wasi-vault = "0.30.0"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -1,24 +1,36 @@
-# Run from the repo root: `just --list`, `just verify`, etc. https://github.com/casey/just
+# aria-poc-2 Just recipes
 
-# Show available recipes
+## Run from repo root (`just --list`, `just precommit`; <https://github.com/casey/just>)
+
+## Full pre-commit — see `.cursor/rules/workflow.mdc` (README, deps, then precommit)
+
 default:
     @just --list
 
-# Format Rust sources
+## Format Rust sources
+
 fmt:
     cargo fmt
 
-# Lint with Clippy (workspace)
+## Lint with Clippy (workspace)
+
 lint:
     cargo clippy --workspace
 
-# Run tests (workspace)
+## Run tests (workspace)
+
 test:
     cargo test --workspace
 
-# Build (workspace)
+## Build (workspace)
+
 build:
     cargo build --workspace
 
-# Full check: fmt, lint, build, test (matches `.cursor` pre-commit workflow)
+## Full check (step 3 of pre-commit in `.cursor/rules/workflow.mdc`)
+
 verify: fmt lint build test
+
+## Automated checks after README + dependency-direction review
+
+precommit: verify

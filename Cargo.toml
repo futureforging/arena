@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anthropic-api-key-from-local-file = { path = "tools" }
+aria-vault-anthropic-local = { path = "crates/aria-vault-anthropic-local" }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 serde_json = "1"
 
 [workspace]
-members = ["tools"]
+members = ["crates/aria-vault-anthropic-local"]
 resolver = "2"

@@ -35,9 +35,11 @@ No stdin is read for the knock-knock flow; the binary alternates secure agent an
 
 ## Workspace
 
-The root [`Cargo.toml`](Cargo.toml) is a **Cargo workspace**: the **`aria-poc-2`** package and **`tools`** ([`anthropic-api-key-from-local-file`](tools/Cargo.toml)). The root package is a workspace member automatically; **`members = ["tools"]`** adds the tools crate.
+The root [`Cargo.toml`](Cargo.toml) is a **Cargo workspace**: the **`aria-poc-2`** package plus **`crates/aria-vault-anthropic-local`**.
 
 ## Checks
+
+**Pre-commit** (full order is in [`.cursor/rules/workflow.mdc`](.cursor/rules/workflow.mdc)): (1) review this README for accuracy vs the repo, (2) confirm dependency direction (**core** → **application** → **infrastructure**, inward only), (3) run automated checks below.
 
 With [just](https://github.com/casey/just) installed:
 
@@ -46,10 +48,10 @@ just lint
 just test
 ```
 
-Full sequence (format, lint, build, test)—same order as pre-commit in [`.cursor/rules/workflow.mdc`](.cursor/rules/workflow.mdc):
+Automated sequence (format, lint, build, test)—use **`just precommit`** or **`just verify`** (equivalent):
 
 ```sh
-just verify
+just precommit
 ```
 
 Equivalent raw `cargo` commands:
@@ -63,4 +65,4 @@ cargo test --workspace
 
 ## API keys
 
-If you use a local API key file, name it `anthropic_api_key.txt` at the repo root (ignored by git per `.gitignore`). Call **`anthropic_api_key_from_local_file`** from the **`anthropic-api-key-from-local-file`** workspace crate (see [`tools/src/anthropic_api_key_from_local_file.rs`](tools/src/anthropic_api_key_from_local_file.rs)), then pass the key and an optional **base** system prompt via **`SecureAgent::new`** (which uses **`ClaudeLlm::new`** internally). **`main`** does that for the secure agent and exits with a message on stderr if the key file is missing or invalid. The **peer agent** uses **`KnockKnockAudienceLlm`**, which does not call the network. **`DummyLlm`** is a minimal always-same-reply **`Llm`** if you swap adapters in your own entrypoint.
+If you use a local API key file, name it `anthropic_api_key.txt` at the repo root (ignored by git per `.gitignore`). Call **`anthropic_api_key_from_local_file`** from the **`aria-vault-anthropic-local`** crate ([`crates/aria-vault-anthropic-local`](crates/aria-vault-anthropic-local)), then pass the key and an optional **base** system prompt via **`SecureAgent::new`** (which uses **`ClaudeLlm::new`** internally). **`main`** does that for the secure agent and exits with a message on stderr if the key file is missing or invalid. The **peer agent** uses **`KnockKnockAudienceLlm`**, which does not call the network. **`DummyLlm`** is a minimal always-same-reply **`Llm`** if you swap adapters in your own entrypoint.
