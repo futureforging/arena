@@ -18,6 +18,7 @@ Each turn appends the peer line, merges system prompts, calls **`Llm::complete`*
 ## Requirements
 
 - Rust **nightly** (see `rust-toolchain.toml`).
+- Optional: [just](https://github.com/casey/just) for shortcuts (`just lint`, `just test`, `just verify`, etc.; see [`justfile`](justfile) at the repo root).
 
 ## Build and run
 
@@ -33,6 +34,21 @@ No stdin is read for the knock-knock flow; the binary alternates the two partici
 The root [`Cargo.toml`](Cargo.toml) is a **Cargo workspace**: the **`aria-poc-2`** package and **`tools`** ([`anthropic-api-key-from-local-file`](tools/Cargo.toml)). The root package is a workspace member automatically; **`members = ["tools"]`** adds the tools crate.
 
 ## Checks
+
+With [just](https://github.com/casey/just) installed:
+
+```sh
+just lint
+just test
+```
+
+Full sequence (format, lint, build, test)—same order as pre-commit in [`.cursor/rules/workflow.mdc`](.cursor/rules/workflow.mdc):
+
+```sh
+just verify
+```
+
+Equivalent raw `cargo` commands:
 
 ```sh
 cargo fmt
