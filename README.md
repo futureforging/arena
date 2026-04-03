@@ -24,35 +24,33 @@ On each turn, the incoming peer line is appended, system prompts are merged, **`
 
 ## Arena stub (`arena-stub`)
 
-The **`arena-stub`** binary listens on **`127.0.0.1`** (default port **`3000`**; override with **`ARENA_STUB_PORT`**). It exposes **`POST /message`** with body **`{"message":"<teller line>"}`** and returns **`{"reply":"<audience line>"}`**, using the same scripted knock-knock audience sequence as [`KnockKnockAudienceLlm`](src/infrastructure/adapters/llm/knock_knock_audience_llm.rs) (logic duplicated locally in `arena-stub` for a self-contained PoC). Sending the exact teller line **`Would you like to hear a knock-knock joke?`** at any point resets the internal step counter so you can run another full exchange without restarting the process.
+The **`arena-stub`** binary listens on **`127.0.0.1:3000`** (see **`ARENA_STUB_LISTEN_PORT`** and **`ARENA_STUB_MESSAGE_URL`** in [`arena-stub/src/lib.rs`](arena-stub/src/lib.rs)). It exposes **`POST /message`** with body **`{"message":"<teller line>"}`** and returns **`{"reply":"<audience line>"}`**, using the same scripted knock-knock audience sequence as [`KnockKnockAudienceLlm`](src/infrastructure/adapters/llm/knock_knock_audience_llm.rs) (logic duplicated locally in `arena-stub` for a self-contained PoC). Sending the exact teller line **`Would you like to hear a knock-knock joke?`** at any point resets the internal step counter so you can run another full exchange without restarting the process.
 
-**Try it:** in one terminal run **`just run-arena`** (or **`cargo run -p arena-stub`**). In another, run the teller lines in order (each request advances the stub’s internal step; **send a new request per line**):
+**Try it:** in one terminal run **`just run-arena`** (or **`cargo run -p arena-stub`**). In another, run the teller lines in order (each request advances the stub’s internal step; **send a new request per line**). URLs match the constants in **`arena-stub/src/lib.rs`**. For each request the server prints two lines to stdout—**`peer <- <teller line>`** then **`agent -> <audience line>`**—in the same style as **`aria-poc-2`** **`Agent`** standard logging and **`print`** output.
 
 ```sh
-BASE=http://127.0.0.1:3000/message
-
 # 1) Teller: invitation → audience: yes
-curl -s -X POST "$BASE" -H "Content-Type: application/json" \
+curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
   -d '{"message": "Would you like to hear a knock-knock joke?"}'
 # → {"reply":"yes"}
 
 # 2) Teller: “Knock knock.” → audience: Who's there?
-curl -s -X POST "$BASE" -H "Content-Type: application/json" \
+curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
   -d '{"message": "Knock knock."}'
 # → {"reply":"Who's there?"}
 
 # 3) Teller: setup word → audience: {word} who?
-curl -s -X POST "$BASE" -H "Content-Type: application/json" \
+curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
   -d '{"message": "Boo"}'
 # → {"reply":"Boo who?"}
 
 # 4) Teller: punchline → audience: haha
-curl -s -X POST "$BASE" -H "Content-Type: application/json" \
+curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
   -d '{"message": "Don'\''t cry, it'\''s just a joke!"}'
 # → {"reply":"haha"}
 
 # 5) Further messages return an empty reply until you restart (see below).
-curl -s -X POST "$BASE" -H "Content-Type: application/json" \
+curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
   -d '{"message": "Thanks!"}'
 # → {"reply":""}
 ```

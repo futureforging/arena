@@ -1,5 +1,11 @@
 //! Knock-knock audience state machine for the HTTP arena stub (duplicated from `aria-poc-2` `KnockKnockAudienceLlm`).
 
+/// TCP port the arena-stub HTTP server binds to on **`127.0.0.1`**.
+pub const ARENA_STUB_LISTEN_PORT: u16 = 3000;
+
+/// Full URL for **`POST /message`** (same host/port as the server). README examples should match; see test `arena_stub_message_url_matches_listen_port`.
+pub const ARENA_STUB_MESSAGE_URL: &str = "http://127.0.0.1:3000/message";
+
 /// When the teller sends this exact line, the scripted audience sequence restarts from step 0 (same line as turn 1 of a new game).
 pub const INVITATION_RESTART_MESSAGE: &str = "Would you like to hear a knock-knock joke?";
 
@@ -45,8 +51,17 @@ pub fn process_audience_turn(step: &mut u8, message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        audience_reply, parse_setup_word, process_audience_turn, INVITATION_RESTART_MESSAGE,
+        audience_reply, parse_setup_word, process_audience_turn, ARENA_STUB_LISTEN_PORT,
+        ARENA_STUB_MESSAGE_URL, INVITATION_RESTART_MESSAGE,
     };
+
+    #[test]
+    fn arena_stub_message_url_matches_listen_port() {
+        assert_eq!(
+            ARENA_STUB_MESSAGE_URL,
+            format!("http://127.0.0.1:{}/message", ARENA_STUB_LISTEN_PORT)
+        );
+    }
 
     #[test]
     fn parse_setup_strips_trailing_period() {

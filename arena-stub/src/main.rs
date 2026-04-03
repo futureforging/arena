@@ -5,12 +5,15 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use arena_stub::process_audience_turn;
+use arena_stub::{process_audience_turn, ARENA_STUB_LISTEN_PORT};
 use axum::{extract::State, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
 
-/// Default TCP port when `ARENA_STUB_PORT` is unset.
-const DEFAULT_LISTEN_PORT: u16 = 3000;
+/// Display name for the arena-stub process (mirrors `aria-poc-2` `Agent::print`: `"{name} -> {reply}"`).
+const STUB_AGENT_NAME: &str = "agent";
+
+/// Label for incoming teller lines (mirrors `aria-poc-2` `Agent::receive_message` standard log: `"{name} <- {message}"`).
+const PEER_LABEL: &str = "peer";
 
 #[derive(Clone)]
 struct AppState {
@@ -35,7 +38,9 @@ async fn post_message(
         .step
         .lock()
         .expect("audience state mutex poisoned");
+    println!("{} <- {}", PEER_LABEL, body.message);
     let reply = process_audience_turn(&mut guard, &body.message);
+    println!("{} -> {}", STUB_AGENT_NAME, reply);
     Json(MessageReply {
         reply,
     })
@@ -43,14 +48,7 @@ async fn post_message(
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-    let port = std::env::var("ARENA_STUB_PORT")
-        .ok()
-        .and_then(|s| {
-            s.parse::<u16>()
-                .ok()
-        })
-        .unwrap_or(DEFAULT_LISTEN_PORT);
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let addr = SocketAddr::from(([127, 0, 0, 1], ARENA_STUB_LISTEN_PORT));
     let state = AppState {
         step: Arc::new(Mutex::new(0)),
     };
