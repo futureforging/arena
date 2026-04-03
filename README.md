@@ -1,173 +1,105 @@
 # aria-poc-2
 
-This repository is a **Cargo workspace** with three members:
+This repository is a **Cargo workspace** for peer-to-peer agent demos. The workspace root has **no** `[package]` — only member crates.
 
-| Member | Role |
-| --- | --- |
-| **`aria-core`** | Shared domain library: **`Agent`**, ports (**`Arena`**, **`Llm`**, **`Runtime`**, **`PostJsonTransport`**, etc.) in [`core/`](core/). |
-| **`aria-poc-2`** | Agent library and **`main`** binary: knock-knock demo with **`SecureAgent`** talking to **`arena-stub`** over HTTP ([`Arena`](core/src/arena.rs) / [`ArenaHttpClient`](src/infrastructure/adapters/arena/arena_http_client.rs)). |
-| **`arena-stub`** | Standalone HTTP server that simulates a future **Arena**: it plays the knock-knock **audience** role via **`POST /message`** (scripted replies; depends on **`aria-core`** for shared vocabulary; no dependency on `aria-poc-2`). |
+## Architecture
 
-**Peer-to-peer AI agents** in Rust. The knock-knock demo is a **peer interaction**: the **`SecureAgent`** completes [`Agent::receive_message`](core/src/agent.rs) turns while the scripted audience lines are supplied by **`arena-stub`** over HTTP ([`Arena::send`](core/src/arena.rs)).
-
-A **secure agent** is the composition implemented as [`SecureAgent`](src/infrastructure/adapters/agent/secure_agent.rs): [`ShellEnvironment`](src/infrastructure/adapters/environment/shell_environment.rs), Anthropic [`ClaudeLlm`](src/infrastructure/adapters/llm/claude_llm.rs), and fixed display name **`SecureAgent`**. The API key and outbound HTTP for Claude are obtained only in [`SecureAgent::new`](src/infrastructure/adapters/agent/secure_agent.rs) from a single [`Runtime`](core/src/runtime.rs) (see **Runtimes** below): **`get_secret`** for the key and **`create_transport`** for an owned [`PostJsonTransport`](core/src/transport.rs) (backed by Omnia’s **`HttpDefault`** `wasi:http` host implementation from **`omnia-wasi-http`**). The [`PostJsonTransport`](core/src/transport.rs) trait remains domain vocabulary for [`ClaudeLlm`](src/infrastructure/adapters/llm/claude_llm.rs) and [`ArenaHttpClient`](src/infrastructure/adapters/arena/arena_http_client.rs); it is no longer injected separately at the **`SecureAgent`** level. The core **`Agent`** does not carry a runtime. This is the first concrete shape of the secure-agent idea; **later iterations will lean further into that concept.**
-
-The **audience** side of the exchange in **`main`** is not an in-process [`Agent`](core/src/agent.rs): it is **`arena-stub`**, reached through the [`Arena`](core/src/arena.rs) port ([`ArenaHttpClient`](src/infrastructure/adapters/arena/arena_http_client.rs)). [`KnockKnockAudienceLlm`](src/infrastructure/adapters/llm/knock_knock_audience_llm.rs) remains in the codebase (same script as the stub) for tests and reuse but is not used by the **`main`** binary.
-
-| Layer | Crate | Main pieces |
+| Directory | Crate | Role |
 | --- | --- | --- |
-| **core** | **`aria-core`** ([`core/`](core/)) | **`Agent`**, **`Arena`**, **`Session`**, **`Environment`**, **`Llm`**, **`Game`** / **`Challenge`**, **`play_game`**, **`KnockKnockGame`**, **`Runtime`** (secrets + **`post_json`** + **`create_transport`**), **`PostJsonTransport`** / **`TransportError`** (HTTP vocabulary; not fields on **`Agent`**) |
-| **application** | **`aria-poc-2`** ([`src/application/`](src/application/)) | **`create_agent`** |
-| **infrastructure** | **`aria-poc-2`** ([`src/infrastructure/`](src/infrastructure/)) | **`SecureAgent`**, **`ArenaHttpClient`**, **`ShellEnvironment`**, **`ClaudeLlm`**, **`KnockKnockAudienceLlm`**, **`OmniaWasiHttpPostJson`**, **`DummyLlm`**, **`OmniaRuntime`**, **`OmniaWasiVaultAnthropicLocal`** |
-| **arena-stub** | **`arena-stub`** ([`arena-stub/`](arena-stub/)) | HTTP server only: **`POST /message`** JSON `{"message":"..."}` → `{"reply":"..."}` for the scripted audience lines. |
+| `core/` | `aria-core` | Shared domain types, trait ports (`Arena`, `Llm`, `Environment`, `Game`), `play_game`, `KnockKnockGame`, and tests. |
+| `secure-agent/` | `aria-secure-agent` | **WASI guest** (`wasm32-wasip2` cdylib): constrained agent that handles `POST /play`, uses WASI vault for the Anthropic API key and WASI HTTP for the arena and Anthropic APIs. |
+| `runtime/` | `aria-runtime` | **Omnia host** binary: loads the guest `.wasm`, links vault + HTTP + OpenTelemetry + **in-memory `wasi:keyvalue`** (`KeyValueDefault`; required because the guest’s HTTP stack imports keyvalue). |
+| `arena-stub/` | `arena-stub` | Local HTTP **arena** peer: scripted knock-knock audience via `POST /message`. |
 
-**Dependency direction:** **`aria-core`** does not depend on **`aria-poc-2`** or **`arena-stub`**. **`aria-poc-2`** and **`arena-stub`** depend on **`aria-core`**. Within **`aria-poc-2`**, **`application`** and **`infrastructure`** depend on **`aria-core`**; **`application`** does not depend on **`infrastructure`**.
+**Dependency direction:** `aria-core` has no dependency on other members. `aria-secure-agent` and `arena-stub` depend on `aria-core`. `aria-runtime` does **not** depend on `aria-core` or `aria-secure-agent` (it loads the guest wasm from disk).
 
-### Games
+The guest uses Axum’s `IntoResponse` for HTTP handlers instead of `omnia_sdk::HttpResult`: `omnia-sdk` 0.30.0 does not currently compile on this toolchain, while the WASI/Omnia crates used for vault and HTTP do.
 
-Arena challenges are defined in **`aria-core`** by implementing the **`Game`** trait ([`core/src/game.rs`](core/src/game.rs)). A **`Challenge`** carries a system prompt, optional private context (merged into the session system prompt when present), an opening message, and the game’s **`is_complete`** logic decides when to stop. The generic loop is **`play_game`** ([`core/src/game_loop.rs`](core/src/game_loop.rs)): configure the agent from the challenge, send the opening message, then exchange agent lines with the arena until the game reports completion.
+### How it works
 
-**Knock-knock** is the first concrete implementation: **`KnockKnockGame`** ([`core/src/games/knock_knock.rs`](core/src/games/knock_knock.rs)) holds the teller prompts and completion rules; **`arena-stub`** plays the audience.
-
-**Adding a new game:** implement **`Game`** for your challenge (for example Yao’s Millionaire or PSI), supplying prompts, optional private context, and **`is_complete`**. Reuse **`play_game`**, **`SecureAgent`**, and **`ArenaHttpClient`** unchanged.
-
-On each turn, the incoming peer line is appended, system prompts are merged, **`Llm::complete`** runs, and the reply is appended. Incoming lines are **`print`**ed as **`peer <- {message}`** (always), and the agent reply as **`{name} -> {reply}`**. **`main`** builds one [`OmniaRuntime`](src/infrastructure/adapters/runtime/omnia_runtime.rs), calls **`create_transport`** for [`ArenaHttpClient`](src/infrastructure/adapters/arena/arena_http_client.rs) (**`POST /message`** to **`arena-stub`**), then passes the runtime to **`SecureAgent::new`** (see **Runtimes** below) with no base system prompt (the game supplies the full session prompt), and runs **`play_game`** with **`KnockKnockGame`**. Logging uses hierarchical **`LoggingLevel`** (**`None`** / **`Standard`** / **`Verbose`**); see [`core/src/environment.rs`](core/src/environment.rs).
-
-## Arena stub (`arena-stub`)
-
-The **`arena-stub`** binary listens on **`127.0.0.1:3000`** (see **`ARENA_STUB_LISTEN_PORT`** and **`ARENA_STUB_MESSAGE_URL`** in [`arena-stub/src/lib.rs`](arena-stub/src/lib.rs)). It exposes **`POST /message`** with body **`{"message":"<teller line>"}`** and returns **`{"reply":"<audience line>"}`**, using the same scripted knock-knock audience sequence as [`KnockKnockAudienceLlm`](src/infrastructure/adapters/llm/knock_knock_audience_llm.rs) (logic duplicated locally in `arena-stub` for a self-contained PoC). Sending the exact teller line **`Would you like to hear a knock-knock joke?`** at any point resets the internal step counter so you can run another full exchange without restarting the process.
-
-**Try it:** in one terminal run **`just run-arena`** (or **`cargo run -p arena-stub`**). In another, run the teller lines in order (each request advances the stub’s internal step; **send a new request per line**). URLs match the constants in **`arena-stub/src/lib.rs`**. For each request the server prints two lines to stdout—**`peer <- <teller line>`** then **`agent -> <audience line>`**—in the same style as **`aria-poc-2`** **`Agent`** standard logging and **`print`** output.
-
-```sh
-# 1) Teller: invitation → audience: yes
-curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
-  -d '{"message": "Would you like to hear a knock-knock joke?"}'
-# → {"reply":"yes"}
-
-# 2) Teller: “Knock knock.” → audience: Who's there?
-curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
-  -d '{"message": "Knock knock."}'
-# → {"reply":"Who's there?"}
-
-# 3) Teller: setup word → audience: {word} who?
-curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
-  -d '{"message": "Boo"}'
-# → {"reply":"Boo who?"}
-
-# 4) Teller: punchline → audience: haha
-curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
-  -d '{"message": "Don'\''t cry, it'\''s just a joke!"}'
-# → {"reply":"haha"}
-
-# 5) Further messages return an empty reply until you restart (see below).
-curl -s -X POST "http://127.0.0.1:3000/message" -H "Content-Type: application/json" \
-  -d '{"message": "Thanks!"}'
-# → {"reply":""}
-```
-
-To **play again** without restarting the server, send the invitation line again; that resets the step counter and the next response is **`{"reply":"yes"}`** (same as step 1).
-
-**Tests:** The scripted audience behavior and invitation reset are covered by unit tests on the shared library (`arena-stub/src/lib.rs`). Run **`just test-arena`** or **`cargo test -p arena-stub`**. The full workspace test suite includes all members: **`just test`** or **`cargo test --workspace`**.
-
-The main **`aria-poc-2`** demo uses this HTTP path: start **`arena-stub`** first, then **`cargo run -p aria-poc-2`** or **`just run-agent`**. Optional: **`just demo`** starts the stub in the background, waits, then runs the agent. Additional challenges can be added as new **`Game`** implementations (e.g. Yao’s Millionaire, PSI) without changing the generic loop.
-
-## Runtimes
-
-**`Runtime`** is the unified capability boundary: **`get_secret`**, **`post_json`**, and **`create_transport`**. **`SecureAgent::new`** takes only a **`Runtime`**: it resolves the Anthropic API key via **`get_secret`** ([`ANTHROPIC_API_KEY_SECRET`](core/src/runtime.rs)), obtains an owned [`PostJsonTransport`](core/src/transport.rs) via **`create_transport`** for [`ClaudeLlm`](src/infrastructure/adapters/llm/claude_llm.rs), and does not retain the runtime. Callers that need a separate transport (e.g. [`ArenaHttpClient`](src/infrastructure/adapters/arena/arena_http_client.rs)) also use **`create_transport`** on the same runtime.
-
-**`main`** constructs **`OmniaRuntime`** with **`OmniaWasiVaultAnthropicLocal`**, which resolves secrets through Omnia’s host-side **`wasi:vault`** traits (**`WasiVaultCtx`** / **`Locker`**) and reads the same default key file read-only. Outbound HTTP uses [`OmniaWasiHttpPostJson`](src/infrastructure/adapters/runtime/plugins/omnia_wasi_http_post_json.rs) internally and for each **`create_transport`** call. You can swap in other **`WasiVaultCtx`** implementations (in-memory, cloud vaults, or a full WASI guest boundary) without changing **`SecureAgent`**.
-
-## Current behavior
-
-- **Two processes:** start **`arena-stub`** (**`just run-arena`**) so it listens on **`127.0.0.1:3000`** and plays the knock-knock **audience** (same script as [`KnockKnockAudienceLlm`](src/infrastructure/adapters/llm/knock_knock_audience_llm.rs)). Run the agent (**`just run-agent`**): **`play_game`** drives **`SecureAgent`** and [`ArenaHttpClient`](src/infrastructure/adapters/arena/arena_http_client.rs) (**`POST /message`** after each teller line); peer replies arrive as **`{"reply":"..."}`** over HTTP and are fed into **`SecureAgent::receive_message`**. There is no interactive input: **`KnockKnockGame`** provides a synthetic greeting (**`Hello.`**) as the opening message so the teller can open with an invitation. The stub replies in order: **`yes`**, **`Who's there?`**, **`{word} who?`**, then **`haha`**, then empty. **`SecureAgent`** follows the teller session prompt through invitation, **`Knock knock.`**, setup, punchline, and a brief parting after **`haha`**. The loop stops when the peer reply is empty or after a bounded number of turns (**`KnockKnockGame::is_complete`**).
-- **`start_session`** (inside **`play_game`**) stores Claude’s lines under transcript **`assistant`** and peer lines under **`user`**, matching what the Anthropic Messages API expects (each completion runs after a final **`user`** message).
+1. The runtime loads the secure-agent WASM and grants vault + HTTP + keyvalue (+ otel) capabilities.
+2. A `POST /play` request to the runtime’s HTTP port triggers the guest’s handler, which runs `play_game` from `aria-core` inside the sandbox. The Omnia stack listens on **`0.0.0.0:8080`** by default (override with env **`HTTP_ADDR`**, e.g. `127.0.0.1:8080`). Use **`http://127.0.0.1:8080/play`** in `curl`, not port 8000.
+3. The agent reads the API key from WASI vault, talks to the arena and to Anthropic only through WASI HTTP.
+4. The host controls both capabilities; the guest has no direct filesystem access for secrets, no raw env-based secret injection in the guest, and no unsandboxed network.
 
 ## Requirements
 
-- Rust **nightly** (see `rust-toolchain.toml`).
-- Optional: [just](https://github.com/casey/just) for shortcuts (`just lint`, `just test`, `just verify`, etc.; see [`justfile`](justfile) at the repo root).
+- Rust **nightly** and the **`wasm32-wasip2`** target (see `rust-toolchain.toml`).
+- Optional: [just](https://github.com/casey/just) for shortcuts (`justfile` at the repo root).
 
 ## Build and run
 
-**Knock-knock demo (agent + arena-stub):** in one terminal start the stub, in another run the agent.
+**Build everything (native runtime + wasm guest):**
 
 ```sh
-# Terminal A
+just build
+```
+
+**Knock-knock end-to-end:**
+
+```sh
+# 1) Build the guest
+cargo build -p aria-secure-agent --target wasm32-wasip2
+
+# 2) Terminal A — arena stub (listens on 127.0.0.1:3000)
 just run-arena
 # or: cargo run -p arena-stub
+
+# 3) Terminal B — Omnia runtime with the guest
+just run-runtime
+# or: cargo run -p aria-runtime -- run target/wasm32-wasip2/debug/aria_secure_agent.wasm
+
+# 4) Terminal C — trigger the game (runtime HTTP defaults to port 8080; see HTTP_ADDR)
+curl -s -X POST http://127.0.0.1:8080/play \
+  -H "Content-Type: application/json" \
+  -d '{"game": "knock-knock", "arena_url": "http://127.0.0.1:3000"}'
 ```
 
-```sh
-# Terminal B
-cargo build -p aria-poc-2
-cargo run -p aria-poc-2
-```
+The request can take **minutes** to return: each turn calls the LLM and the arena over WASI HTTP. To avoid `curl` giving up, add e.g. **`--max-time 600`**.
 
-(or **`just run-agent`**)
+**Anthropic API key on the host:** place `anthropic_api_key.txt` at the **workspace root**, or set **`ARIA_ANTHROPIC_API_KEY_FILE`** to the key file path. The runtime vault backend (`runtime/src/plugins/vault_anthropic_local.rs`) serves secret id `anthropic_api_key` from locker `aria-anthropic`, matching the guest.
 
-**Convenience (stub in background, then agent):** **`just demo`**
+## Arena stub
 
-**Arena stub only:**
+The **arena-stub** binary listens on **`127.0.0.1:3000`** (see `arena-stub/src/lib.rs` for `ARENA_STUB_LISTEN_PORT` and related constants). It exposes **`POST /message`** with body `{"message":"..."}` and returns `{"reply":"..."}` for the scripted knock-knock audience. See that file for scripted steps and the invitation reset behavior.
 
-```sh
-cargo run -p arena-stub
-```
-
-(or **`just run-arena`**)
-
-**Entire workspace:**
-
-```sh
-cargo build --workspace
-```
-
-No stdin is read for the knock-knock flow; the **`aria-poc-2`** binary exchanges messages with **`arena-stub`** over HTTP until the scripted sequence completes (empty peer reply or turn limit).
-
-## Layout
-
-The workspace root lists **`aria-poc-2`** (package at `.`), **`arena-stub`**, and **`core`** (**`aria-core`**). Domain types and ports live under **`core/src/`**; the agent library and re-exports live in **`src/lib.rs`**; the **`main`** binary entry point is **`src/main.rs`**. **`aria-core`** depends only on **`serde_json`** and **`tempfile`** (the latter for [`test_support`](core/src/test_support.rs)). Shared test doubles for ports live in **`aria-core`** as **`aria_core::test_support`** (used by **`aria-core`** unit tests and by **`aria-poc-2`** integration tests).
+**Outbound HTTP from the guest:** Prefer **`http://127.0.0.1:3000`** in `arena_url`. The stub listens on **IPv4 only**; using `localhost` can resolve to **`::1`**, so the request never hits port 3000. The guest normalizes `localhost` to `127.0.0.1` before calling the arena. If you use a system **`HTTP_PROXY`**, set **`NO_PROXY`** so `127.0.0.1` and `localhost` are reached directly (the `just run-runtime` recipe sets this).
 
 ## Checks
 
-**Pre-commit** (full order is in [`.cursor/rules/workflow.mdc`](.cursor/rules/workflow.mdc)): (1) review this README for accuracy vs the repo, (2) confirm dependency direction (**`aria-core`** has no dependency on **`aria-poc-2`** or **`arena-stub`**; **`aria-poc-2`** / **`arena-stub`** depend on **`aria-core`**; within **`aria-poc-2`**, **`application`** does not depend on **`infrastructure`**), (3) run automated checks below.
-
-With [just](https://github.com/casey/just) installed:
+With [just](https://github.com/casey/just):
 
 ```sh
 just lint
 just test
 ```
 
-`aria-core` tests only:
+Full automated sequence (format, lint, build host + guest, test):
+
+```sh
+just verify
+# same as: just precommit
+```
+
+Equivalent raw commands:
+
+```sh
+cargo fmt --all
+cargo clippy --workspace
+just build
+cargo test --workspace
+```
+
+**Pre-commit** (full order is in [`.cursor/rules/workflow.mdc`](.cursor/rules/workflow.mdc)): (1) review this README, (2) confirm dependency direction, (3) run the automated checks above.
+
+`aria-core` only:
 
 ```sh
 just test-core
 ```
 
-Arena stub tests only:
+`arena-stub` only:
 
 ```sh
 just test-arena
 ```
-
-Automated sequence (format, lint, build, test)—use **`just precommit`** or **`just verify`** (equivalent):
-
-```sh
-just precommit
-```
-
-Equivalent raw `cargo` commands:
-
-```sh
-cargo fmt --all
-cargo clippy --workspace
-cargo build --workspace
-cargo test --workspace
-```
-
-## API keys
-
-If you use a local API key file, name it `anthropic_api_key.txt` at the repo root (ignored by git per `.gitignore`). **`SecureAgent::new`** asks the runtime for the secret named **`anthropic_api_key`** ([**`ANTHROPIC_API_KEY_SECRET`**](core/src/runtime.rs)) and obtains HTTP via **`Runtime::create_transport`**. The Omnia vault uses the same id as **`ANTHROPIC_VAULT_SECRET_ID`** with locker **`aria-anthropic`** (**`ANTHROPIC_VAULT_LOCKER_ID`**). Configure the key file via [`OmniaWasiVaultAnthropicLocal::new`](src/infrastructure/adapters/runtime/plugins/omnia_wasi_vault_anthropic_local.rs) (default: repo-root file). Empty or missing content maps to “not found” for the vault **`get`** path; **`main`** exits if **`SecureAgent::new`** fails.
-
-The core **`Agent`** value does not retain the runtime. The **arena-stub** process does not load secrets; neither does an in-process **Peer** wired with **`KnockKnockAudienceLlm`**. **`DummyLlm`** is a minimal always-same-reply **`Llm`** if you swap adapters in your own entrypoint.

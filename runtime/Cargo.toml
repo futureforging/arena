@@ -1,0 +1,22 @@
+[package]
+name = "aria-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "aria-runtime"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+cfg-if = "1"
+futures = "0.3"
+omnia = "0.30.0"
+omnia-wasi-http = "0.30.0"
+omnia-wasi-keyvalue = "0.30.0"
+omnia-wasi-otel = "0.30.0"
+omnia-wasi-vault = "0.30.0"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

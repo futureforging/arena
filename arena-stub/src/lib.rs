@@ -1,4 +1,4 @@
-//! Knock-knock audience state machine for the HTTP arena stub (duplicated from `aria-poc-2` `KnockKnockAudienceLlm`).
+//! Knock-knock audience state machine for the HTTP arena stub (script aligned with the knock-knock game in `aria-core`).
 
 /// TCP port the arena-stub HTTP server binds to on **`127.0.0.1`**.
 pub const ARENA_STUB_LISTEN_PORT: u16 = 3000;

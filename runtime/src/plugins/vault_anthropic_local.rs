@@ -5,38 +5,61 @@ use std::{
     sync::Arc,
 };
 
-use aria_core::runtime::ANTHROPIC_API_KEY_SECRET;
 use futures::FutureExt;
+use omnia::{Backend, FromEnv};
 use omnia_wasi_vault::{FutureResult, Locker, WasiVaultCtx};
 
-/// Locker id expected by this vault backend.
+/// Locker id expected by this vault backend (must match the secure-agent guest).
 pub const ANTHROPIC_VAULT_LOCKER_ID: &str = "aria-anthropic";
 
-/// Secret id for the Anthropic API key (same string as [`ANTHROPIC_API_KEY_SECRET`](aria_core::runtime::ANTHROPIC_API_KEY_SECRET)).
-pub const ANTHROPIC_VAULT_SECRET_ID: &str = ANTHROPIC_API_KEY_SECRET;
+/// Secret id for the Anthropic API key (must match `anthropic_api_key` in `aria-core` and the guest).
+pub const ANTHROPIC_VAULT_SECRET_ID: &str = "anthropic_api_key";
 
-/// Default filename for the Anthropic API key at the repository root.
+/// Default filename for the Anthropic API key at the workspace root (parent of `runtime/`).
 const DEFAULT_KEY_FILE_NAME: &str = "anthropic_api_key.txt";
 
-/// Host vault backend that serves the Anthropic API key from a local file (read-only).
+/// Connection options for [`VaultAnthropicLocalFile`].
 #[derive(Debug, Clone)]
-pub struct OmniaWasiVaultAnthropicLocal {
-    key_file: PathBuf,
+pub struct VaultConnectOptions {
+    /// Path to the API key file, or [`None`] to use the default workspace-root file.
+    pub key_file: Option<PathBuf>,
 }
 
-impl OmniaWasiVaultAnthropicLocal {
-    /// Creates a vault backend reading from the given file path.
-    /// Pass [`None`] to use the default repo-root location.
-    pub fn new(key_file: Option<PathBuf>) -> Self {
-        let key_file = key_file
-            .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join(DEFAULT_KEY_FILE_NAME));
-        Self {
+impl FromEnv for VaultConnectOptions {
+    fn from_env() -> anyhow::Result<Self> {
+        let key_file = std::env::var("ARIA_ANTHROPIC_API_KEY_FILE")
+            .ok()
+            .map(PathBuf::from);
+        Ok(Self {
             key_file,
-        }
+        })
     }
 }
 
-impl WasiVaultCtx for OmniaWasiVaultAnthropicLocal {
+/// Host vault backend that serves the Anthropic API key from a local file (read-only).
+#[derive(Debug, Clone)]
+pub struct VaultAnthropicLocalFile {
+    key_file: PathBuf,
+}
+
+impl Backend for VaultAnthropicLocalFile {
+    type ConnectOptions = VaultConnectOptions;
+
+    async fn connect_with(options: Self::ConnectOptions) -> anyhow::Result<Self> {
+        let key_file = options
+            .key_file
+            .unwrap_or_else(|| {
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("..")
+                    .join(DEFAULT_KEY_FILE_NAME)
+            });
+        Ok(Self {
+            key_file,
+        })
+    }
+}
+
+impl WasiVaultCtx for VaultAnthropicLocalFile {
     fn open_locker(&self, identifier: String) -> FutureResult<Arc<dyn Locker>> {
         if identifier != ANTHROPIC_VAULT_LOCKER_ID {
             let expected = ANTHROPIC_VAULT_LOCKER_ID.to_string();
@@ -140,17 +163,23 @@ impl Locker for AnthropicFileLocker {
 
 #[cfg(test)]
 mod tests {
-    use aria_core::test_support::named_temp_file_with_writeln;
+    use std::io::Write;
+
+    use omnia::Backend;
     use omnia_wasi_vault::{Locker, WasiVaultCtx};
+    use tempfile::NamedTempFile;
 
     use super::{
-        AnthropicFileLocker, OmniaWasiVaultAnthropicLocal, ANTHROPIC_VAULT_LOCKER_ID,
-        ANTHROPIC_VAULT_SECRET_ID,
+        AnthropicFileLocker, VaultAnthropicLocalFile, VaultConnectOptions,
+        ANTHROPIC_VAULT_LOCKER_ID, ANTHROPIC_VAULT_SECRET_ID,
     };
 
     #[tokio::test]
     async fn open_locker_rejects_unknown_id() -> Result<(), anyhow::Error> {
-        let vault = OmniaWasiVaultAnthropicLocal::new(None);
+        let vault = VaultAnthropicLocalFile::connect_with(VaultConnectOptions {
+            key_file: None,
+        })
+        .await?;
         let outcome = vault
             .open_locker("not-aria-anthropic".to_string())
             .await;
@@ -170,11 +199,15 @@ mod tests {
 
     #[tokio::test]
     async fn open_locker_accepts_aria_anthropic() -> Result<(), anyhow::Error> {
-        let tmp = named_temp_file_with_writeln("  key-from-test  ")?;
-        let vault = OmniaWasiVaultAnthropicLocal::new(Some(
-            tmp.path()
-                .to_path_buf(),
-        ));
+        let mut tmp = NamedTempFile::new()?;
+        writeln!(tmp, "  key-from-test  ")?;
+        let vault = VaultAnthropicLocalFile::connect_with(VaultConnectOptions {
+            key_file: Some(
+                tmp.path()
+                    .to_path_buf(),
+            ),
+        })
+        .await?;
         let locker = vault
             .open_locker(ANTHROPIC_VAULT_LOCKER_ID.to_string())
             .await?;
@@ -184,7 +217,8 @@ mod tests {
 
     #[tokio::test]
     async fn get_unknown_secret_returns_none() -> Result<(), anyhow::Error> {
-        let tmp = named_temp_file_with_writeln("secret")?;
+        let mut tmp = NamedTempFile::new()?;
+        writeln!(tmp, "secret")?;
         let locker = AnthropicFileLocker {
             path: tmp
                 .path()
@@ -199,7 +233,8 @@ mod tests {
 
     #[tokio::test]
     async fn get_anthropic_key_reads_temp_file() -> Result<(), anyhow::Error> {
-        let tmp = named_temp_file_with_writeln("  trimmed-key  ")?;
+        let mut tmp = NamedTempFile::new()?;
+        writeln!(tmp, "  trimmed-key  ")?;
         let locker = AnthropicFileLocker {
             path: tmp
                 .path()
@@ -215,7 +250,8 @@ mod tests {
 
     #[tokio::test]
     async fn set_returns_read_only_error() -> Result<(), anyhow::Error> {
-        let tmp = named_temp_file_with_writeln("k")?;
+        let mut tmp = NamedTempFile::new()?;
+        writeln!(tmp, "k")?;
         let locker = AnthropicFileLocker {
             path: tmp
                 .path()
@@ -238,7 +274,8 @@ mod tests {
 
     #[tokio::test]
     async fn delete_returns_read_only_error() -> Result<(), anyhow::Error> {
-        let tmp = named_temp_file_with_writeln("k")?;
+        let mut tmp = NamedTempFile::new()?;
+        writeln!(tmp, "k")?;
         let locker = AnthropicFileLocker {
             path: tmp
                 .path()

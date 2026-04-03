@@ -1,9 +1,5 @@
 # aria-poc-2 Just recipes — Cargo workspace
 
-## Run from repo root (`just --list`, `just precommit`; <https://github.com/casey/just>)
-
-## Full pre-commit — see `.cursor/rules/workflow.mdc` (README, deps, then precommit)
-
 default:
     @just --list
 
@@ -12,56 +8,54 @@ default:
 fmt:
     cargo fmt --all
 
-## Lint all workspace members
+## Lint all workspace members (native target only)
 
 lint:
     cargo clippy --workspace
 
-## Run tests (all workspace members)
+## Run tests (all workspace members, native target only)
 
 test:
     cargo test --workspace
 
-## Run aria-core unit tests only
+## Build runtime (native)
+
+build-host:
+    cargo build -p aria-runtime
+
+## Build secure-agent (wasm32-wasip2)
+
+build-guest:
+    cargo build -p aria-secure-agent --target wasm32-wasip2
+
+## Build everything
+
+build: build-host build-guest
+
+## Full check (native targets — guest checked separately)
+
+verify: fmt lint build test
+
+## Automated checks
+
+precommit: verify
+
+## Run the arena stub
+
+run-arena:
+    cargo run -p arena-stub
+
+## Run the runtime with the secure-agent guest (HTTP on 0.0.0.0:8080 unless HTTP_ADDR is set; curl POST /play)
+
+run-runtime: build-guest
+    NO_PROXY=127.0.0.1,localhost,::1 cargo run -p aria-runtime -- run target/wasm32-wasip2/debug/aria_secure_agent.wasm
+
+## Run core tests only
 
 test-core:
     cargo test -p aria-core
 
-## Run arena-stub unit tests only (knock-knock script + invitation reset)
+## Run arena-stub tests only
 
 test-arena:
     cargo test -p arena-stub
-
-## Build all workspace members
-
-build:
-    cargo build --workspace
-
-## Full check
-
-verify: fmt lint build test
-
-## Automated checks after README + dependency-direction review
-
-precommit: verify
-
-## Run the main agent (knock-knock demo via HTTP to arena-stub on 127.0.0.1:3000)
-
-run-agent:
-    cargo run -p aria-poc-2
-
-## Run the full knock-knock demo (arena-stub + agent).
-## Starts arena-stub in background, runs agent, then stops arena-stub.
-
-demo:
-    @echo "Starting arena-stub..."
-    @cargo run -p arena-stub &
-    @sleep 1
-    @echo "Running agent..."
-    @cargo run -p aria-poc-2
-    @echo "Demo complete."
-
-## Run the arena stub (HTTP audience server on 127.0.0.1:3000)
-
-run-arena:
-    cargo run -p arena-stub

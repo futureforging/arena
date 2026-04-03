@@ -1,0 +1,25 @@
+[package]
+name = "aria-secure-agent"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+aria-core = { path = "../core" }
+anyhow = "1"
+serde_json = "1"
+tracing = "0.1"
+http = "1"
+http-body-util = "0.1"
+bytes = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+omnia-wasi-vault = "0.30.0"
+omnia-wasi-http = "0.30.0"
+omnia-wasi-otel = "0.30.0"
+omnia-wasi-otel-attr = "0.30.0"
+wasip3 = { version = "0.4.0", features = ["http-compat"] }
+wit-bindgen = "0.53"
+axum = { version = "0.8", default-features = false, features = ["json"] }
