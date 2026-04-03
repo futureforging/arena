@@ -1,0 +1,13 @@
+[package]
+name = "arena-stub"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "arena-stub"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }

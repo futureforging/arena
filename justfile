@@ -1,4 +1,4 @@
-# aria-poc-2 Just recipes
+# aria-poc-2 Just recipes — Cargo workspace
 
 ## Run from repo root (`just --list`, `just precommit`; <https://github.com/casey/just>)
 
@@ -7,30 +7,45 @@
 default:
     @just --list
 
-## Format Rust sources
+## Format all workspace members
 
 fmt:
-    cargo fmt
+    cargo fmt --all
 
-## Lint with Clippy (`--workspace` matches the single root package)
+## Lint all workspace members
 
 lint:
     cargo clippy --workspace
 
-## Run tests
+## Run tests (all workspace members)
 
 test:
-    cargo test
+    cargo test --workspace
 
-## Build
+## Run arena-stub unit tests only (knock-knock script + invitation reset)
+
+test-arena:
+    cargo test -p arena-stub
+
+## Build all workspace members
 
 build:
-    cargo build
+    cargo build --workspace
 
-## Full check (step 3 of pre-commit in `.cursor/rules/workflow.mdc`)
+## Full check
 
 verify: fmt lint build test
 
 ## Automated checks after README + dependency-direction review
 
 precommit: verify
+
+## Run the main agent (knock-knock demo, in-process peer)
+
+run-agent:
+    cargo run -p aria-poc-2
+
+## Run the arena stub (HTTP audience server on 127.0.0.1:3000)
+
+run-arena:
+    cargo run -p arena-stub

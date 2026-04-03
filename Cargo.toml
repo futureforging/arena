@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "arena-stub"]
+resolver = "2"
+
 [package]
 name = "aria-poc-2"
 version = "0.1.0"
