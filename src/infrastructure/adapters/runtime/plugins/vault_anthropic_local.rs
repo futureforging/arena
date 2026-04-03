@@ -139,14 +139,13 @@ impl Locker for AnthropicFileLocker {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use omnia_wasi_vault::{Locker, WasiVaultCtx};
 
     use super::{
         AnthropicFileLocker, VaultAnthropicLocalFile, ANTHROPIC_VAULT_LOCKER_ID,
         ANTHROPIC_VAULT_SECRET_ID,
     };
+    use crate::test_support::named_temp_file_with_writeln;
 
     #[tokio::test]
     async fn open_locker_rejects_unknown_id() -> Result<(), anyhow::Error> {
@@ -170,8 +169,7 @@ mod tests {
 
     #[tokio::test]
     async fn open_locker_accepts_aria_anthropic() -> Result<(), anyhow::Error> {
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        writeln!(tmp, "  key-from-test  ")?;
+        let tmp = named_temp_file_with_writeln("  key-from-test  ")?;
         let vault = VaultAnthropicLocalFile::new(Some(
             tmp.path()
                 .to_path_buf(),
@@ -185,8 +183,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_unknown_secret_returns_none() -> Result<(), anyhow::Error> {
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        writeln!(tmp, "secret")?;
+        let tmp = named_temp_file_with_writeln("secret")?;
         let locker = AnthropicFileLocker {
             path: tmp
                 .path()
@@ -201,8 +198,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_anthropic_key_reads_temp_file() -> Result<(), anyhow::Error> {
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        writeln!(tmp, "  trimmed-key  ")?;
+        let tmp = named_temp_file_with_writeln("  trimmed-key  ")?;
         let locker = AnthropicFileLocker {
             path: tmp
                 .path()
@@ -213,6 +209,52 @@ mod tests {
             .await?
             .ok_or_else(|| anyhow::anyhow!("expected Some"))?;
         assert_eq!(got, b"trimmed-key");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn set_returns_read_only_error() -> Result<(), anyhow::Error> {
+        let tmp = named_temp_file_with_writeln("k")?;
+        let locker = AnthropicFileLocker {
+            path: tmp
+                .path()
+                .to_path_buf(),
+        };
+        let outcome = locker
+            .set(ANTHROPIC_VAULT_SECRET_ID.to_string(), vec![0u8])
+            .await;
+        let err = match outcome {
+            Ok(_) => return Err(anyhow::anyhow!("expected set to return Err")),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string()
+                .contains("read-only"),
+            "unexpected: {err:?}"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_returns_read_only_error() -> Result<(), anyhow::Error> {
+        let tmp = named_temp_file_with_writeln("k")?;
+        let locker = AnthropicFileLocker {
+            path: tmp
+                .path()
+                .to_path_buf(),
+        };
+        let outcome = locker
+            .delete(ANTHROPIC_VAULT_SECRET_ID.to_string())
+            .await;
+        let err = match outcome {
+            Ok(_) => return Err(anyhow::anyhow!("expected delete to return Err")),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string()
+                .contains("read-only"),
+            "unexpected: {err:?}"
+        );
         Ok(())
     }
 }

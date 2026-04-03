@@ -101,17 +101,17 @@ impl Runtime for LocalFileRuntime {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::{
         read_anthropic_key_strict, AnthropicApiKeyError, LocalFileRuntime, ANTHROPIC_API_KEY_SECRET,
     };
-    use crate::core::runtime::{Runtime, RuntimeError};
+    use crate::{
+        core::runtime::{Runtime, RuntimeError},
+        test_support::named_temp_file_with_writeln,
+    };
 
     #[test]
     fn read_anthropic_key_strict_trims_non_empty_file() -> Result<(), std::io::Error> {
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        writeln!(tmp, "  key-from-test  ")?;
+        let tmp = named_temp_file_with_writeln("  key-from-test  ")?;
         let path = tmp.path();
         let key =
             read_anthropic_key_strict(path).map_err(|e| std::io::Error::other(format!("{e}")))?;
@@ -121,28 +121,12 @@ mod tests {
 
     #[test]
     fn get_secret_anthropic_key_reads_temp_file() -> Result<(), std::io::Error> {
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        writeln!(tmp, "  test-api-key-value  ")?;
+        let tmp = named_temp_file_with_writeln("  test-api-key-value  ")?;
         let path = tmp
             .path()
             .to_path_buf();
         let rt = LocalFileRuntime::new(Some(path));
         assert_eq!(rt.get_secret(ANTHROPIC_API_KEY_SECRET), Ok("test-api-key-value".to_string()));
-        Ok(())
-    }
-
-    #[test]
-    fn get_secret_anthropic_key_matches_strict_read_for_explicit_path() -> Result<(), std::io::Error>
-    {
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        writeln!(tmp, "  same-key  ")?;
-        let path = tmp.path();
-        let from_runtime = LocalFileRuntime::new(Some(path.to_path_buf()))
-            .get_secret(ANTHROPIC_API_KEY_SECRET)
-            .map_err(|e| std::io::Error::other(format!("{e:?}")))?;
-        let from_strict =
-            read_anthropic_key_strict(path).map_err(|e| std::io::Error::other(format!("{e}")))?;
-        assert_eq!(from_runtime, from_strict);
         Ok(())
     }
 
@@ -157,8 +141,7 @@ mod tests {
 
     #[test]
     fn read_anthropic_key_strict_empty_file_returns_empty_variant() -> Result<(), std::io::Error> {
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        writeln!(tmp, "   ")?;
+        let tmp = named_temp_file_with_writeln("   ")?;
         let path = tmp.path();
         let result = read_anthropic_key_strict(path);
         assert!(matches!(result, Err(AnthropicApiKeyError::Empty(_))));

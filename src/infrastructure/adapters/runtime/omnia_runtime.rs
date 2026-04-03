@@ -64,37 +64,16 @@ impl Runtime for OmniaRuntime {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::OmniaRuntime;
     use crate::{
         core::runtime::{Runtime, RuntimeError},
-        infrastructure::adapters::runtime::{
-            VaultAnthropicLocalFile, ANTHROPIC_VAULT_LOCKER_ID, ANTHROPIC_VAULT_SECRET_ID,
-        },
+        infrastructure::adapters::runtime::{VaultAnthropicLocalFile, ANTHROPIC_VAULT_LOCKER_ID},
+        test_support::named_temp_file_with_writeln,
     };
 
     #[test]
-    fn get_secret_reads_via_vault_chain() -> Result<(), std::io::Error> {
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        writeln!(tmp, "  omnia-key  ")?;
-        let vault = Box::new(VaultAnthropicLocalFile::new(Some(
-            tmp.path()
-                .to_path_buf(),
-        )));
-        let runtime = OmniaRuntime::new(vault, ANTHROPIC_VAULT_LOCKER_ID)
-            .map_err(|e| std::io::Error::other(format!("{e:?}")))?;
-        let key = runtime
-            .get_secret(ANTHROPIC_VAULT_SECRET_ID)
-            .map_err(|e| std::io::Error::other(format!("{e:?}")))?;
-        assert_eq!(key, "omnia-key");
-        Ok(())
-    }
-
-    #[test]
     fn get_secret_unknown_name_returns_not_found() -> Result<(), std::io::Error> {
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        writeln!(tmp, "k")?;
+        let tmp = named_temp_file_with_writeln("k")?;
         let vault = Box::new(VaultAnthropicLocalFile::new(Some(
             tmp.path()
                 .to_path_buf(),

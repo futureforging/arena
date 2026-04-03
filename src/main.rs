@@ -2,6 +2,9 @@ mod application;
 mod core;
 mod infrastructure;
 
+#[cfg(test)]
+mod test_support;
+
 pub use core::{
     agent::Agent,
     environment::{log_message_is_allowed, Environment, LogMessageLevel, LoggingLevel},

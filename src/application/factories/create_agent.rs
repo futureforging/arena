@@ -17,37 +17,11 @@ pub fn create_agent<E: Environment, L: Llm>(
 #[cfg(test)]
 mod tests {
     use super::create_agent;
-    use crate::core::{
-        environment::{Environment, LoggingLevel},
-        llm::{ChatMessage, Llm, LlmCompletion},
-    };
-
-    struct StubLlm;
-
-    impl Llm for StubLlm {
-        fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> LlmCompletion {
-            LlmCompletion {
-                reply: String::new(),
-                request_body_json: None,
-            }
-        }
-    }
-
-    struct NoopEnvironment;
-
-    impl Environment for NoopEnvironment {
-        fn print(&self, _s: &str) {}
-
-        fn logging_level(&self) -> LoggingLevel {
-            LoggingLevel::None
-        }
-
-        fn emit_log(&self, _message: &str) {}
-    }
+    use crate::test_support::{EmptyReplyLlm, NoopEnvironment};
 
     #[test]
     fn create_agent_sets_name_and_environment() {
-        let agent = create_agent("test", NoopEnvironment, StubLlm);
+        let agent = create_agent("test", NoopEnvironment, EmptyReplyLlm);
         assert_eq!(agent.name, "test");
     }
 }

@@ -49,9 +49,8 @@ pub trait Environment {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-
     use super::{log_message_is_allowed, Environment, LogMessageLevel, LoggingLevel};
+    use crate::test_support::InMemoryEnvironment;
 
     #[test]
     fn log_message_is_allowed_respects_hierarchy() {
@@ -63,63 +62,23 @@ mod tests {
         assert!(log_message_is_allowed(LoggingLevel::Verbose, LogMessageLevel::Verbose));
     }
 
-    struct TestEnv {
-        level: LoggingLevel,
-        emitted: RefCell<Vec<String>>,
-    }
-
-    impl TestEnv {
-        fn new(level: LoggingLevel) -> Self {
-            Self {
-                level,
-                emitted: RefCell::new(Vec::new()),
-            }
-        }
-    }
-
-    impl Environment for TestEnv {
-        fn print(&self, _s: &str) {}
-
-        fn logging_level(&self) -> LoggingLevel {
-            self.level
-        }
-
-        fn emit_log(&self, message: &str) {
-            self.emitted
-                .borrow_mut()
-                .push(message.to_string());
-        }
-    }
-
     #[test]
     fn environment_log_default_delegates_to_emit_log_when_allowed() {
-        let env = TestEnv::new(LoggingLevel::Standard);
+        let env = InMemoryEnvironment::new(LoggingLevel::Standard);
         env.log("a", LogMessageLevel::Standard);
         env.log("b", LogMessageLevel::Verbose);
-        assert_eq!(
-            env.emitted
-                .borrow()
-                .as_slice(),
-            &[String::from("a")]
-        );
+        assert_eq!(env.logged_lines(), vec![String::from("a")]);
 
-        let env_v = TestEnv::new(LoggingLevel::Verbose);
+        let env_v = InMemoryEnvironment::new(LoggingLevel::Verbose);
         env_v.log("s2", LogMessageLevel::Standard);
         env_v.log("v2", LogMessageLevel::Verbose);
-        assert_eq!(
-            env_v
-                .emitted
-                .borrow()
-                .as_slice(),
-            &[String::from("s2"), String::from("v2")]
-        );
+        assert_eq!(env_v.logged_lines(), vec![String::from("s2"), String::from("v2")]);
 
-        let env_n = TestEnv::new(LoggingLevel::None);
+        let env_n = InMemoryEnvironment::new(LoggingLevel::None);
         env_n.log("x", LogMessageLevel::Standard);
         env_n.log("y", LogMessageLevel::Verbose);
         assert!(env_n
-            .emitted
-            .borrow()
+            .logged_lines()
             .is_empty());
     }
 }

@@ -44,7 +44,7 @@ No stdin is read for the knock-knock flow; the binary alternates secure agent an
 
 ## Layout
 
-The repo is a single Rust package (**`aria-poc-2`**) at the repository root.
+The repo is a single Rust package (**`aria-poc-2`**) at the repository root. Shared unit-test doubles and fixtures live in **`src/test_support.rs`** (loaded only when testing via **`#[cfg(test)] mod test_support`** in **`main.rs`**).
 
 ## Checks
 
