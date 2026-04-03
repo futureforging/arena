@@ -67,14 +67,16 @@ mod tests {
     use super::OmniaRuntime;
     use crate::{
         core::runtime::{Runtime, RuntimeError},
-        infrastructure::adapters::runtime::{VaultAnthropicLocalFile, ANTHROPIC_VAULT_LOCKER_ID},
+        infrastructure::adapters::runtime::{
+            OmniaWasiVaultAnthropicLocal, ANTHROPIC_VAULT_LOCKER_ID,
+        },
         test_support::named_temp_file_with_writeln,
     };
 
     #[test]
     fn get_secret_unknown_name_returns_not_found() -> Result<(), std::io::Error> {
         let tmp = named_temp_file_with_writeln("k")?;
-        let vault = Box::new(VaultAnthropicLocalFile::new(Some(
+        let vault = Box::new(OmniaWasiVaultAnthropicLocal::new(Some(
             tmp.path()
                 .to_path_buf(),
         )));

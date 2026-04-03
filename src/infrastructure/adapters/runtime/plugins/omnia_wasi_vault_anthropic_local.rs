@@ -21,11 +21,11 @@ const DEFAULT_KEY_FILE_NAME: &str = "anthropic_api_key.txt";
 
 /// Host vault backend that serves the Anthropic API key from a local file (read-only).
 #[derive(Debug, Clone)]
-pub struct VaultAnthropicLocalFile {
+pub struct OmniaWasiVaultAnthropicLocal {
     key_file: PathBuf,
 }
 
-impl VaultAnthropicLocalFile {
+impl OmniaWasiVaultAnthropicLocal {
     /// Creates a vault backend reading from the given file path.
     /// Pass [`None`] to use the default repo-root location.
     pub fn new(key_file: Option<PathBuf>) -> Self {
@@ -37,7 +37,7 @@ impl VaultAnthropicLocalFile {
     }
 }
 
-impl WasiVaultCtx for VaultAnthropicLocalFile {
+impl WasiVaultCtx for OmniaWasiVaultAnthropicLocal {
     fn open_locker(&self, identifier: String) -> FutureResult<Arc<dyn Locker>> {
         if identifier != ANTHROPIC_VAULT_LOCKER_ID {
             let expected = ANTHROPIC_VAULT_LOCKER_ID.to_string();
@@ -144,14 +144,14 @@ mod tests {
     use omnia_wasi_vault::{Locker, WasiVaultCtx};
 
     use super::{
-        AnthropicFileLocker, VaultAnthropicLocalFile, ANTHROPIC_VAULT_LOCKER_ID,
+        AnthropicFileLocker, OmniaWasiVaultAnthropicLocal, ANTHROPIC_VAULT_LOCKER_ID,
         ANTHROPIC_VAULT_SECRET_ID,
     };
     use crate::test_support::named_temp_file_with_writeln;
 
     #[tokio::test]
     async fn open_locker_rejects_unknown_id() -> Result<(), anyhow::Error> {
-        let vault = VaultAnthropicLocalFile::new(None);
+        let vault = OmniaWasiVaultAnthropicLocal::new(None);
         let outcome = vault
             .open_locker("not-aria-anthropic".to_string())
             .await;
@@ -172,7 +172,7 @@ mod tests {
     #[tokio::test]
     async fn open_locker_accepts_aria_anthropic() -> Result<(), anyhow::Error> {
         let tmp = named_temp_file_with_writeln("  key-from-test  ")?;
-        let vault = VaultAnthropicLocalFile::new(Some(
+        let vault = OmniaWasiVaultAnthropicLocal::new(Some(
             tmp.path()
                 .to_path_buf(),
         ));

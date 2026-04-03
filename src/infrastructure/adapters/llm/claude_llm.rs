@@ -13,7 +13,7 @@ const MAX_TOKENS: u32 = 4096;
 
 /// Calls the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages).
 ///
-/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. via [`crate::core::runtime::Runtime::get_secret`] from [`crate::infrastructure::adapters::runtime::OmniaRuntime`] or another [`Runtime`](crate::core::runtime::Runtime) adapter), inject a [`PostJsonTransport`](crate::core::transport::PostJsonTransport) (e.g. [`JsonHttp`](crate::infrastructure::adapters::transport::JsonHttp)), then pass an optional **base** system prompt (merged per request with the session system prompt).
+/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. via [`crate::core::runtime::Runtime::get_secret`] from [`crate::infrastructure::adapters::runtime::OmniaRuntime`] or another [`Runtime`](crate::core::runtime::Runtime) adapter), inject a [`PostJsonTransport`](crate::core::transport::PostJsonTransport) (e.g. [`OmniaWasiHttpPostJson`](crate::infrastructure::adapters::runtime::OmniaWasiHttpPostJson)), then pass an optional **base** system prompt (merged per request with the session system prompt).
 pub struct ClaudeLlm {
     api_key: String,
     transport: Box<dyn PostJsonTransport + Send + Sync>,
