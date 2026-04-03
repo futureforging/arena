@@ -8,11 +8,13 @@ use std::{
 use futures::FutureExt;
 use omnia_wasi_vault::{FutureResult, Locker, WasiVaultCtx};
 
+use crate::core::runtime::ANTHROPIC_API_KEY_SECRET;
+
 /// Locker id expected by this vault backend.
 pub const ANTHROPIC_VAULT_LOCKER_ID: &str = "aria-anthropic";
 
-/// Secret id for the Anthropic API key.
-pub const ANTHROPIC_VAULT_SECRET_ID: &str = "anthropic_api_key";
+/// Secret id for the Anthropic API key (same string as [`ANTHROPIC_API_KEY_SECRET`](crate::core::runtime::ANTHROPIC_API_KEY_SECRET)).
+pub const ANTHROPIC_VAULT_SECRET_ID: &str = ANTHROPIC_API_KEY_SECRET;
 
 /// Default filename for the Anthropic API key at the repository root.
 const DEFAULT_KEY_FILE_NAME: &str = "anthropic_api_key.txt";

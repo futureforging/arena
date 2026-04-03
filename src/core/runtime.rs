@@ -1,3 +1,6 @@
+/// Secret name used with [`Runtime::get_secret`] for the Anthropic API key (must match the vault secret id in infrastructure).
+pub const ANTHROPIC_API_KEY_SECRET: &str = "anthropic_api_key";
+
 /// Error returned by [`Runtime`] operations.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RuntimeError {

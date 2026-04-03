@@ -9,7 +9,7 @@ pub use core::{
     agent::Agent,
     environment::{log_message_is_allowed, Environment, LogMessageLevel, LoggingLevel},
     llm::{ChatMessage, Llm, LlmCompletion},
-    runtime::{Runtime, RuntimeError},
+    runtime::{Runtime, RuntimeError, ANTHROPIC_API_KEY_SECRET},
     session::{
         merge_system_prompts, ActiveSession, ReceiveMessageError, Session, StartSessionError,
         ASSISTANT_ROLE, USER_ROLE,
@@ -20,8 +20,8 @@ pub use application::factories::create_agent::create_agent;
 pub use infrastructure::adapters::{
     environment::ShellEnvironment,
     llm::{ClaudeLlm, DummyLlm, KnockKnockAudienceLlm},
-    AnthropicApiKeyError, LocalFileRuntime, OmniaRuntime, SecureAgent, VaultAnthropicLocalFile,
-    ANTHROPIC_API_KEY_SECRET, ANTHROPIC_VAULT_LOCKER_ID, ANTHROPIC_VAULT_SECRET_ID,
+    OmniaRuntime, SecureAgent, VaultAnthropicLocalFile, ANTHROPIC_VAULT_LOCKER_ID,
+    ANTHROPIC_VAULT_SECRET_ID,
 };
 
 /// Base system instructions merged with the per-session prompt on every completion (model-/adapter-level).
@@ -98,7 +98,6 @@ fn main() {
         KnockKnockAudienceLlm::new(),
     );
 
-    // Swap to `LocalFileRuntime::new(None)` if you want direct file reads without the Omnia vault stack.
     let vault = Box::new(VaultAnthropicLocalFile::new(None));
     let runtime = match OmniaRuntime::new(vault, ANTHROPIC_VAULT_LOCKER_ID) {
         Ok(rt) => rt,
