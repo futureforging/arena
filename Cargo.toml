@@ -4,10 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-aria-vault-anthropic-local = { path = "crates/aria-vault-anthropic-local" }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 serde_json = "1"
 
-[workspace]
-members = ["crates/aria-vault-anthropic-local"]
-resolver = "2"
+[dev-dependencies]
+tempfile = "3"

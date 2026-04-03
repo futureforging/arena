@@ -2,17 +2,17 @@
 
 **Peer-to-peer AI agents** in Rust. The knock-knock demo is a **peer interaction** between a **secure agent** and a **peer agent**—two participants that alternate **`receive_message`** on the core [`Agent`](src/core/agent.rs) API.
 
-A **secure agent** is the composition implemented as [`SecureAgent`](src/infrastructure/adapters/agent/secure_agent.rs): [`ShellEnvironment`](src/infrastructure/adapters/environment/shell_environment.rs), Anthropic [`ClaudeLlm`](src/infrastructure/adapters/llm/claude_llm.rs), and fixed display name **`SecureAgent`**. This is the first concrete shape of the secure-agent idea; **later iterations will lean further into that concept.**
+A **secure agent** is the composition implemented as [`SecureAgent`](src/infrastructure/adapters/agent/secure_agent.rs): [`ShellEnvironment`](src/infrastructure/adapters/environment/shell_environment.rs), Anthropic [`ClaudeLlm`](src/infrastructure/adapters/llm/claude_llm.rs), and fixed display name **`SecureAgent`**. The API key is obtained only in [`SecureAgent::new`](src/infrastructure/adapters/agent/secure_agent.rs) via a [`Runtime`](src/core/runtime.rs) (e.g. [`LocalFileRuntime`](src/infrastructure/adapters/runtime/local_file_runtime.rs) for local dev); the core **`Agent`** does not carry a runtime. This is the first concrete shape of the secure-agent idea; **later iterations will lean further into that concept.**
 
-A **peer agent** is the other side of the exchange (display name **`Peer`**): a core [`Agent`](src/core/agent.rs) wired with the same shell environment and [`KnockKnockAudienceLlm`](src/infrastructure/adapters/llm/knock_knock_audience_llm.rs) for scripted replies instead of Claude.
+A **peer agent** is the other side of the exchange (display name **`Peer`**): a core [`Agent`](src/core/agent.rs) wired with the same shell environment and [`KnockKnockAudienceLlm`](src/infrastructure/adapters/llm/knock_knock_audience_llm.rs) for scripted replies instead of Claude. It does not use a runtime.
 
 | Layer | Main pieces |
 | --- | --- |
-| **`core`** | **`Agent`**, **`Session`**, **`Environment`**, **`Llm`** |
+| **`core`** | **`Agent`**, **`Session`**, **`Environment`**, **`Llm`**, **`Runtime`** (port only; not a field on **`Agent`**) |
 | **`application`** | **`create_agent`** |
-| **`infrastructure`** | **`SecureAgent`**, **`ShellEnvironment`**, **`ClaudeLlm`**, **`KnockKnockAudienceLlm`**, **`JsonHttp`**, **`DummyLlm`** |
+| **`infrastructure`** | **`SecureAgent`**, **`ShellEnvironment`**, **`ClaudeLlm`**, **`KnockKnockAudienceLlm`**, **`JsonHttp`**, **`DummyLlm`**, **`LocalFileRuntime`** |
 
-On each turn, the incoming peer line is appended, system prompts are merged, **`Llm::complete`** runs, the reply is appended, and output is **`print`**ed as **`{name} -> {reply}`**. **`main`** loads the Anthropic key for the secure agent and runs **`play_knock_knock`**. Logging uses hierarchical **`LoggingLevel`** (**`None`** / **`Standard`** / **`Verbose`**); see [`src/core/environment.rs`](src/core/environment.rs).
+On each turn, the incoming peer line is appended, system prompts are merged, **`Llm::complete`** runs, the reply is appended, and output is **`print`**ed as **`{name} -> {reply}`**. **`main`** builds a **`LocalFileRuntime`**, passes it to **`SecureAgent::new`**, and runs **`play_knock_knock`**. Logging uses hierarchical **`LoggingLevel`** (**`None`** / **`Standard`** / **`Verbose`**); see [`src/core/environment.rs`](src/core/environment.rs).
 
 ## Current behavior
 
@@ -27,15 +27,15 @@ On each turn, the incoming peer line is appended, system prompts are merged, **`
 ## Build and run
 
 ```sh
-cargo build --workspace
+cargo build
 cargo run
 ```
 
 No stdin is read for the knock-knock flow; the binary alternates secure agent and peer agent for a fixed sequence of turns and exits after the secure agent’s parting line (**`SecureAgent`**).
 
-## Workspace
+## Layout
 
-The root [`Cargo.toml`](Cargo.toml) is a **Cargo workspace**: the **`aria-poc-2`** package plus **`crates/aria-vault-anthropic-local`**.
+The repo is a single Rust package (**`aria-poc-2`**) at the repository root.
 
 ## Checks
 
@@ -59,10 +59,10 @@ Equivalent raw `cargo` commands:
 ```sh
 cargo fmt
 cargo clippy --workspace
-cargo build --workspace
-cargo test --workspace
+cargo build
+cargo test
 ```
 
 ## API keys
 
-If you use a local API key file, name it `anthropic_api_key.txt` at the repo root (ignored by git per `.gitignore`). Call **`anthropic_api_key_from_local_file`** from the **`aria-vault-anthropic-local`** crate ([`crates/aria-vault-anthropic-local`](crates/aria-vault-anthropic-local)), then pass the key and an optional **base** system prompt via **`SecureAgent::new`** (which uses **`ClaudeLlm::new`** internally). **`main`** does that for the secure agent and exits with a message on stderr if the key file is missing or invalid. The **peer agent** uses **`KnockKnockAudienceLlm`**, which does not call the network. **`DummyLlm`** is a minimal always-same-reply **`Llm`** if you swap adapters in your own entrypoint.
+If you use a local API key file, name it `anthropic_api_key.txt` at the repo root (ignored by git per `.gitignore`). **`main`** constructs a **`LocalFileRuntime`** (optional custom path via [`LocalFileRuntime::new`](src/infrastructure/adapters/runtime/local_file_runtime.rs)) and passes it to **`SecureAgent::new`**. That constructor asks the runtime for the secret named **`anthropic_api_key`** (see **`ANTHROPIC_API_KEY_SECRET`**); [`LocalFileRuntime`](src/infrastructure/adapters/runtime/local_file_runtime.rs) reads and trims the file (see **`AnthropicApiKeyError`**), and **`SecureAgent`** passes the resulting string to **`ClaudeLlm::new`**. The core **`Agent`** value does not retain the runtime. If initialization fails (missing or invalid key file), **`main`** prints to stderr and exits. The **peer agent** does not load secrets. **`DummyLlm`** is a minimal always-same-reply **`Llm`** if you swap adapters in your own entrypoint.

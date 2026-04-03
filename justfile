@@ -12,20 +12,20 @@ default:
 fmt:
     cargo fmt
 
-## Lint with Clippy (workspace)
+## Lint with Clippy (`--workspace` matches the single root package)
 
 lint:
     cargo clippy --workspace
 
-## Run tests (workspace)
+## Run tests
 
 test:
-    cargo test --workspace
+    cargo test
 
-## Build (workspace)
+## Build
 
 build:
-    cargo build --workspace
+    cargo build
 
 ## Full check (step 3 of pre-commit in `.cursor/rules/workflow.mdc`)
 

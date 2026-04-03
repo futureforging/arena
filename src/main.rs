@@ -6,6 +6,7 @@ pub use core::{
     agent::Agent,
     environment::{log_message_is_allowed, Environment, LogMessageLevel, LoggingLevel},
     llm::{ChatMessage, Llm, LlmCompletion},
+    runtime::{Runtime, RuntimeError},
     session::{
         merge_system_prompts, ActiveSession, ReceiveMessageError, Session, StartSessionError,
         ASSISTANT_ROLE, USER_ROLE,
@@ -13,11 +14,10 @@ pub use core::{
 };
 
 pub use application::factories::create_agent::create_agent;
-use aria_vault_anthropic_local::anthropic_api_key_from_local_file;
 pub use infrastructure::adapters::{
     environment::ShellEnvironment,
     llm::{ClaudeLlm, DummyLlm, KnockKnockAudienceLlm},
-    SecureAgent,
+    AnthropicApiKeyError, LocalFileRuntime, SecureAgent, ANTHROPIC_API_KEY_SECRET,
 };
 
 /// Base system instructions merged with the per-session prompt on every completion (model-/adapter-level).
@@ -86,13 +86,7 @@ fn play_knock_knock(
 }
 
 fn main() {
-    let api_key = match anthropic_api_key_from_local_file(None) {
-        Ok(key) => key,
-        Err(e) => {
-            eprintln!("Failed to load Anthropic API key: {e}");
-            std::process::exit(1);
-        },
-    };
+    let runtime = LocalFileRuntime::new(None);
     let mut peer = create_agent(
         "Peer",
         ShellEnvironment {
@@ -101,13 +95,19 @@ fn main() {
         KnockKnockAudienceLlm::new(),
     );
 
-    let mut agent = SecureAgent::new(
-        api_key,
+    let mut agent = match SecureAgent::new(
+        runtime,
         Some(BASE_SYSTEM_PROMPT.to_string()),
         ShellEnvironment {
             logging_level: LoggingLevel::None,
         },
-    );
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("Failed to initialize SecureAgent: {e:?}");
+            std::process::exit(1);
+        },
+    };
 
     play_knock_knock(&mut peer, &mut agent);
 }
