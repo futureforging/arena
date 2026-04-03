@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::transport::{BoxedPostJsonTransport, TransportError};
+use crate::transport::{BoxedPostJsonTransport, TransportError};
 
 /// Secret name used with [`Runtime::get_secret`] for the Anthropic API key (must match the vault secret id in infrastructure).
 pub const ANTHROPIC_API_KEY_SECRET: &str = "anthropic_api_key";
@@ -31,9 +31,9 @@ pub trait Runtime {
         body: &Value,
     ) -> Result<Vec<u8>, TransportError>;
 
-    /// Creates an owned [`PostJsonTransport`] backed by this runtime's HTTP capability.
+    /// Creates an owned [`PostJsonTransport`](crate::transport::PostJsonTransport) backed by this runtime's HTTP capability.
     ///
-    /// Used by factories like [`crate::infrastructure::adapters::agent::SecureAgent::new`]
+    /// Used by factories (for example `SecureAgent::new` in the agent crate)
     /// to provide HTTP to components that take ownership of a transport.
     fn create_transport(&self) -> Result<BoxedPostJsonTransport, RuntimeError>;
 }

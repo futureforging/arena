@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "arena-stub"]
+members = [".", "arena-stub", "core"]
 resolver = "2"
 
 [package]
@@ -8,6 +8,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aria-core = { path = "core" }
 anyhow = "1.0.102"
 bytes = "1"
 futures = "0.3.32"

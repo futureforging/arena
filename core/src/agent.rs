@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     environment::{Environment, LogMessageLevel},
     llm::{ChatMessage, Llm},
     session::{
@@ -66,7 +66,7 @@ impl<E: Environment, L: Llm> Agent<E, L> {
             .map(|active| active.session)
     }
 
-    /// Records a **peer** message, prints the incoming line as **`peer <- {message}`** (always, independent of logging level), completes with [`Llm::complete`](Llm::complete), logs [`LlmCompletion`](crate::core::llm::LlmCompletion) request JSON at [`LogMessageLevel::Verbose`] when the adapter supplies it and the environment allows verbose logs, then appends this **Agent**’s reply (under [`ActiveSession::agent_role`](crate::core::session::ActiveSession)) and prints it as **`{name} -> {reply}`**.
+    /// Records a **peer** message, prints the incoming line as **`peer <- {message}`** (always, independent of logging level), completes with [`Llm::complete`](Llm::complete), logs [`LlmCompletion`](crate::llm::LlmCompletion) request JSON at [`LogMessageLevel::Verbose`] when the adapter supplies it and the environment allows verbose logs, then appends this **Agent**’s reply (under [`ActiveSession::agent_role`](crate::session::ActiveSession)) and prints it as **`{name} -> {reply}`**.
     ///
     /// Returns [`ReceiveMessageError::NoActiveSession`] if [`start_session`](Self::start_session) was not called or after [`stop_session`](Self::stop_session).
     pub fn receive_message(&mut self, message: &str) -> Result<String, ReceiveMessageError> {
@@ -129,12 +129,10 @@ impl<E: Environment, L: Llm> Agent<E, L> {
 mod tests {
     use super::Agent;
     use crate::{
-        core::{
-            environment::LoggingLevel,
-            session::{
-                merge_system_prompts, ReceiveMessageError, Session, StartSessionError,
-                ASSISTANT_ROLE, USER_ROLE,
-            },
+        environment::LoggingLevel,
+        session::{
+            merge_system_prompts, ReceiveMessageError, Session, StartSessionError, ASSISTANT_ROLE,
+            USER_ROLE,
         },
         test_support::{
             agent_with_stub, InMemoryEnvironment, StubLlm, STUB_LLM_REPLY, STUB_REQUEST_JSON,

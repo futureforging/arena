@@ -1,4 +1,4 @@
-use crate::core::environment::{Environment, LoggingLevel};
+use aria_core::environment::{Environment, LoggingLevel};
 
 /// Sends output to the process shell via `println!` for [`Environment::print`](Environment::print)
 /// and `eprintln!` for [`Environment::emit_log`](Environment::emit_log).

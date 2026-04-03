@@ -19,8 +19,8 @@ impl fmt::Display for TransportError {
 
 /// Outbound HTTP POST with a JSON body; returns raw response bytes on HTTP success.
 ///
-/// Infrastructure adapters (e.g. [`crate::infrastructure::adapters::runtime::OmniaWasiHttpPostJson`]) implement this port;
-/// [`crate::infrastructure::adapters::llm::ClaudeLlm`] uses it for the Anthropic Messages API.
+/// Infrastructure adapters (for example Omnia WASI HTTP) implement this port;
+/// Claude LLM adapters use it for the Anthropic Messages API.
 pub trait PostJsonTransport {
     /// POSTs JSON to `url` with the given headers and returns the response body on HTTP success.
     fn post_json(

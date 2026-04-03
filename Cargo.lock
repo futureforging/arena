@@ -107,9 +107,18 @@ checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 name = "arena-stub"
 version = "0.1.0"
 dependencies = [
+ "aria-core",
  "axum",
  "serde",
  "tokio",
+]
+
+[[package]]
+name = "aria-core"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -117,6 +126,7 @@ name = "aria-poc-2"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aria-core",
  "bytes",
  "futures",
  "http",

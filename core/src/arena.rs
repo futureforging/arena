@@ -20,8 +20,8 @@ impl fmt::Display for ArenaError {
 
 /// Port for exchanging messages with a peer in an arena challenge.
 ///
-/// Infrastructure adapters (e.g. [`crate::infrastructure::adapters::ArenaHttpClient`])
-/// implement this port; the agent loop in `main` uses it to interact with a counterparty
+/// Infrastructure adapters (for example HTTP `ArenaHttpClient` in the agent crate) implement this port;
+/// the agent loop in `main` uses it to interact with a counterparty
 /// without knowing whether the peer is local, a stub server, or the real
 /// [Scaling Trust Arena](https://arena.nicolaos.org).
 pub trait Arena {

@@ -5,15 +5,14 @@ use std::{
     sync::Arc,
 };
 
+use aria_core::runtime::ANTHROPIC_API_KEY_SECRET;
 use futures::FutureExt;
 use omnia_wasi_vault::{FutureResult, Locker, WasiVaultCtx};
-
-use crate::core::runtime::ANTHROPIC_API_KEY_SECRET;
 
 /// Locker id expected by this vault backend.
 pub const ANTHROPIC_VAULT_LOCKER_ID: &str = "aria-anthropic";
 
-/// Secret id for the Anthropic API key (same string as [`ANTHROPIC_API_KEY_SECRET`](crate::core::runtime::ANTHROPIC_API_KEY_SECRET)).
+/// Secret id for the Anthropic API key (same string as [`ANTHROPIC_API_KEY_SECRET`](aria_core::runtime::ANTHROPIC_API_KEY_SECRET)).
 pub const ANTHROPIC_VAULT_SECRET_ID: &str = ANTHROPIC_API_KEY_SECRET;
 
 /// Default filename for the Anthropic API key at the repository root.
@@ -141,13 +140,13 @@ impl Locker for AnthropicFileLocker {
 
 #[cfg(test)]
 mod tests {
+    use aria_core::test_support::named_temp_file_with_writeln;
     use omnia_wasi_vault::{Locker, WasiVaultCtx};
 
     use super::{
         AnthropicFileLocker, OmniaWasiVaultAnthropicLocal, ANTHROPIC_VAULT_LOCKER_ID,
         ANTHROPIC_VAULT_SECRET_ID,
     };
-    use crate::test_support::named_temp_file_with_writeln;
 
     #[tokio::test]
     async fn open_locker_rejects_unknown_id() -> Result<(), anyhow::Error> {

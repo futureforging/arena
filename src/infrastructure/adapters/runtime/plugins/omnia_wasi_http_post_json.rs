@@ -1,16 +1,15 @@
-//! [`PostJsonTransport`](crate::core::transport::PostJsonTransport) using Omnia’s [`wasi:http`](https://github.com/WebAssembly/wasi-http)
+//! [`PostJsonTransport`](aria_core::transport::PostJsonTransport) using Omnia’s [`wasi:http`](https://github.com/WebAssembly/wasi-http)
 //! host implementation ([`HttpDefault`](omnia_wasi_http::HttpDefault)), which performs outbound HTTP the same way as the Omnia runtime’s HTTP service.
 
 use std::{convert::Infallible, future::poll_fn, pin::Pin, sync::Mutex};
 
+use aria_core::transport::{PostJsonTransport, TransportError};
 use bytes::Bytes;
 use http::{header::CONTENT_TYPE, Method, Request, Uri};
 use http_body_util::{BodyExt, Full};
 use omnia_wasi_http::HttpDefault;
 use serde_json::Value;
 use wasmtime_wasi_http::p3::{bindings::http::types::ErrorCode, WasiHttpCtx};
-
-use crate::core::transport::{PostJsonTransport, TransportError};
 
 /// Outbound JSON POST via Omnia [`HttpDefault`](omnia_wasi_http::HttpDefault) (`wasi:http` host path).
 pub struct OmniaWasiHttpPostJson {

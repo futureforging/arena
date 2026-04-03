@@ -1,14 +1,14 @@
 mod application;
-mod core;
 mod infrastructure;
 
-#[cfg(test)]
-mod test_support;
-
-pub use core::{
+pub use application::factories::create_agent::create_agent;
+pub use aria_core::{
     agent::Agent,
     arena::{Arena, ArenaError},
     environment::{log_message_is_allowed, Environment, LogMessageLevel, LoggingLevel},
+    game::{Challenge, Game},
+    game_loop::{play_game, PlayGameError},
+    games::KnockKnockGame,
     llm::{ChatMessage, Llm, LlmCompletion},
     runtime::{Runtime, RuntimeError, ANTHROPIC_API_KEY_SECRET},
     session::{
@@ -19,8 +19,6 @@ pub use core::{
         BoxedPostJsonTransport, IntoBoxedPostJsonTransport, PostJsonTransport, TransportError,
     },
 };
-
-pub use application::factories::create_agent::create_agent;
 pub use infrastructure::adapters::{
     environment::ShellEnvironment,
     llm::{ClaudeLlm, DummyLlm, KnockKnockAudienceLlm},

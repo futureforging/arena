@@ -22,6 +22,11 @@ lint:
 test:
     cargo test --workspace
 
+## Run aria-core unit tests only
+
+test-core:
+    cargo test -p aria-core
+
 ## Run arena-stub unit tests only (knock-knock script + invitation reset)
 
 test-arena:

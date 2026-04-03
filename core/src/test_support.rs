@@ -1,14 +1,16 @@
-//! Shared test doubles and fixtures (`#[cfg(test)]` only).
+//! Shared test doubles and fixtures for `aria-core` and downstream crates.
 //!
-//! Agent / [`Environment`] / [`Llm`] fakes for core tests, plus temp-file helpers for runtime adapter tests.
+//! Agent / [`Environment`] / [`Llm`] fakes, transport stubs, plus temp-file helpers for runtime adapter tests.
 
 use std::{cell::RefCell, io::Write};
 
 use tempfile::NamedTempFile;
 
-use crate::core::{
+use crate::{
     agent::Agent,
+    arena::{Arena, ArenaError},
     environment::{Environment, LoggingLevel},
+    game::{Challenge, Game},
     llm::{ChatMessage, Llm, LlmCompletion},
     transport::{PostJsonTransport, TransportError},
 };
@@ -156,7 +158,7 @@ pub fn agent_with_stub() -> Agent<InMemoryEnvironment, StubLlm> {
     }
 }
 
-/// Minimal [`Environment`] for tests that only need trait satisfaction (e.g. [`crate::application::factories::create_agent::create_agent`] wiring).
+/// Minimal [`Environment`] for tests that only need trait satisfaction (e.g. wiring tests).
 pub struct NoopEnvironment;
 
 impl Environment for NoopEnvironment {
@@ -223,5 +225,55 @@ impl PostJsonTransport for StubPostJsonTransport {
         Ok(self
             .response_bytes
             .clone())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Arena / Game doubles (game loop tests)
+// ---------------------------------------------------------------------------
+
+/// Configurable [`Arena`] for tests. Returns replies from a list in order,
+/// then returns empty strings.
+pub struct StubArena {
+    replies: RefCell<Vec<String>>,
+}
+
+impl StubArena {
+    pub fn new(replies: Vec<String>) -> Self {
+        Self {
+            replies: RefCell::new(replies),
+        }
+    }
+}
+
+impl Arena for StubArena {
+    fn send(&self, _message: &str) -> Result<String, ArenaError> {
+        let mut replies = self
+            .replies
+            .borrow_mut();
+        if replies.is_empty() {
+            Ok(String::new())
+        } else {
+            Ok(replies.remove(0))
+        }
+    }
+}
+
+/// Minimal [`Game`] for [`crate::game_loop::play_game`] tests.
+pub struct StubGame {
+    pub max_turns: usize,
+}
+
+impl Game for StubGame {
+    fn challenge(&self) -> Challenge {
+        Challenge {
+            system_prompt: String::from("test system prompt"),
+            private_context: None,
+            opening_message: String::from("hello"),
+        }
+    }
+
+    fn is_complete(&self, turn: usize, last_peer_reply: &str) -> bool {
+        turn >= self.max_turns || last_peer_reply.is_empty()
     }
 }

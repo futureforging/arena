@@ -8,6 +8,7 @@ name = "arena-stub"
 path = "src/main.rs"
 
 [dependencies]
+aria-core = { path = "../core" }
 axum = { version = "0.8", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }

@@ -1,4 +1,4 @@
-use crate::core::{agent::Agent, environment::Environment, llm::Llm};
+use aria_core::{agent::Agent, environment::Environment, llm::Llm};
 
 /// Creates an [`Agent`] with the given `name`, `environment`, and `llm`.
 pub fn create_agent<E: Environment, L: Llm>(
@@ -16,8 +16,9 @@ pub fn create_agent<E: Environment, L: Llm>(
 
 #[cfg(test)]
 mod tests {
+    use aria_core::test_support::{EmptyReplyLlm, NoopEnvironment};
+
     use super::create_agent;
-    use crate::test_support::{EmptyReplyLlm, NoopEnvironment};
 
     #[test]
     fn create_agent_sets_name_and_environment() {

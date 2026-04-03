@@ -1,13 +1,13 @@
-//! [`Runtime`](crate::core::runtime::Runtime) backed by Omnia `wasi:vault` host traits.
+//! [`Runtime`](aria_core::runtime::Runtime) backed by Omnia `wasi:vault` host traits.
 
+use aria_core::{
+    runtime::{Runtime, RuntimeError},
+    transport::{BoxedPostJsonTransport, TransportError},
+};
 use omnia_wasi_vault::WasiVaultCtx;
 use serde_json::Value;
 
 use super::plugins::OmniaWasiHttpPostJson;
-use crate::core::{
-    runtime::{Runtime, RuntimeError},
-    transport::{BoxedPostJsonTransport, TransportError},
-};
 
 /// [`Runtime`] backed by an Omnia `wasi:vault` provider.
 ///
@@ -94,13 +94,14 @@ impl Runtime for OmniaRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::OmniaRuntime;
-    use crate::{
-        core::runtime::{Runtime, RuntimeError},
-        infrastructure::adapters::runtime::{
-            OmniaWasiVaultAnthropicLocal, ANTHROPIC_VAULT_LOCKER_ID,
-        },
+    use aria_core::{
+        runtime::{Runtime, RuntimeError},
         test_support::named_temp_file_with_writeln,
+    };
+
+    use super::OmniaRuntime;
+    use crate::infrastructure::adapters::runtime::{
+        OmniaWasiVaultAnthropicLocal, ANTHROPIC_VAULT_LOCKER_ID,
     };
 
     #[test]

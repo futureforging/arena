@@ -1,9 +1,8 @@
-use serde_json::{json, Map, Value};
-
-use crate::core::{
+use aria_core::{
     llm::{ChatMessage, Llm, LlmCompletion},
     transport::{BoxedPostJsonTransport, IntoBoxedPostJsonTransport},
 };
+use serde_json::{json, Map, Value};
 
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -13,7 +12,7 @@ const MAX_TOKENS: u32 = 4096;
 
 /// Calls the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages).
 ///
-/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. via [`crate::core::runtime::Runtime::get_secret`] from [`crate::infrastructure::adapters::runtime::OmniaRuntime`] or another [`Runtime`](crate::core::runtime::Runtime) adapter), supply HTTP via [`IntoBoxedPostJsonTransport`] (e.g. [`crate::core::runtime::Runtime::create_transport`] or a concrete [`PostJsonTransport`](crate::core::transport::PostJsonTransport) such as [`OmniaWasiHttpPostJson`](crate::infrastructure::adapters::runtime::OmniaWasiHttpPostJson)), then pass an optional **base** system prompt (merged per request with the session system prompt).
+/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. via [`Runtime::get_secret`](aria_core::runtime::Runtime) from [`OmniaRuntime`](crate::infrastructure::adapters::runtime::OmniaRuntime) or another [`Runtime`](aria_core::runtime::Runtime) adapter), supply HTTP via [`IntoBoxedPostJsonTransport`](aria_core::transport::IntoBoxedPostJsonTransport) (e.g. [`Runtime::create_transport`](aria_core::runtime::Runtime) or a concrete [`PostJsonTransport`](aria_core::transport::PostJsonTransport) such as [`OmniaWasiHttpPostJson`](crate::infrastructure::adapters::runtime::OmniaWasiHttpPostJson)), then pass an optional **base** system prompt (merged per request with the session system prompt).
 pub struct ClaudeLlm {
     api_key: String,
     transport: BoxedPostJsonTransport,

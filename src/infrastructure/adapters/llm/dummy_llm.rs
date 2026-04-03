@@ -1,4 +1,4 @@
-use crate::core::llm::{ChatMessage, Llm, LlmCompletion};
+use aria_core::llm::{ChatMessage, Llm, LlmCompletion};
 
 const DUMMY_LLM_RESPONSE: &str = "Hello.";
 

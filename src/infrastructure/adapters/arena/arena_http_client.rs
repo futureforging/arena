@@ -1,9 +1,8 @@
-use serde_json::json;
-
-use crate::core::{
+use aria_core::{
     arena::{Arena, ArenaError},
     transport::{BoxedPostJsonTransport, IntoBoxedPostJsonTransport},
 };
+use serde_json::json;
 
 /// [`Arena`] backed by an HTTP endpoint (e.g. the `arena-stub` server).
 ///
@@ -47,11 +46,12 @@ impl Arena for ArenaHttpClient {
 
 #[cfg(test)]
 mod tests {
-    use super::ArenaHttpClient;
-    use crate::{
-        core::arena::{Arena, ArenaError},
+    use aria_core::{
+        arena::{Arena, ArenaError},
         test_support::StubPostJsonTransport,
     };
+
+    use super::ArenaHttpClient;
 
     #[test]
     fn send_returns_reply_when_json_valid() -> Result<(), String> {

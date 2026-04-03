@@ -1,12 +1,11 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::{
-    core::{
-        agent::Agent,
-        runtime::{Runtime, RuntimeError, ANTHROPIC_API_KEY_SECRET},
-    },
-    infrastructure::adapters::{environment::ShellEnvironment, llm::ClaudeLlm},
+use aria_core::{
+    agent::Agent,
+    runtime::{Runtime, RuntimeError, ANTHROPIC_API_KEY_SECRET},
 };
+
+use crate::infrastructure::adapters::{environment::ShellEnvironment, llm::ClaudeLlm};
 
 const DISPLAY_NAME: &str = "SecureAgent";
 

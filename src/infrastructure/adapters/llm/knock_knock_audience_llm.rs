@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::core::{
+use aria_core::{
     llm::{ChatMessage, Llm, LlmCompletion},
     session::ASSISTANT_ROLE,
 };
@@ -90,11 +90,12 @@ impl Llm for KnockKnockAudienceLlm {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_setup_word, KnockKnockAudienceLlm};
-    use crate::core::{
+    use aria_core::{
         llm::{ChatMessage, Llm},
         session::{ASSISTANT_ROLE, USER_ROLE},
     };
+
+    use super::{parse_setup_word, KnockKnockAudienceLlm};
 
     #[test]
     fn complete_first_turn_is_yes() {
