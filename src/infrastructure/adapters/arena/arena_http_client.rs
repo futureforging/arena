@@ -2,7 +2,7 @@ use serde_json::json;
 
 use crate::core::{
     arena::{Arena, ArenaError},
-    transport::PostJsonTransport,
+    transport::{BoxedPostJsonTransport, IntoBoxedPostJsonTransport},
 };
 
 /// [`Arena`] backed by an HTTP endpoint (e.g. the `arena-stub` server).
@@ -11,18 +11,15 @@ use crate::core::{
 /// parses `{"reply": "..."}` from the response.
 pub struct ArenaHttpClient {
     base_url: String,
-    transport: Box<dyn PostJsonTransport + Send + Sync>,
+    transport: BoxedPostJsonTransport,
 }
 
 impl ArenaHttpClient {
     /// Creates a client targeting the given base URL (e.g. `"http://127.0.0.1:3000"`).
-    pub fn new(
-        base_url: impl Into<String>,
-        transport: impl PostJsonTransport + Send + Sync + 'static,
-    ) -> Self {
+    pub fn new(base_url: impl Into<String>, transport: impl IntoBoxedPostJsonTransport) -> Self {
         Self {
             base_url: base_url.into(),
-            transport: Box::new(transport),
+            transport: transport.into_boxed_post_json_transport(),
         }
     }
 }

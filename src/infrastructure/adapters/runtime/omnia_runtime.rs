@@ -1,24 +1,31 @@
 //! [`Runtime`](crate::core::runtime::Runtime) backed by Omnia `wasi:vault` host traits.
 
 use omnia_wasi_vault::WasiVaultCtx;
+use serde_json::Value;
 
-use crate::core::runtime::{Runtime, RuntimeError};
+use super::plugins::OmniaWasiHttpPostJson;
+use crate::core::{
+    runtime::{Runtime, RuntimeError},
+    transport::{BoxedPostJsonTransport, TransportError},
+};
 
 /// [`Runtime`] backed by an Omnia `wasi:vault` provider.
 ///
 /// Delegates `get_secret` to the vault's locker interface. The vault backend
 /// is injected at construction — it could be a local file reader, an in-memory
-/// store, or a production secrets manager.
+/// store, or a production secrets manager. Outbound HTTP is provided via an
+/// internal [`PostJsonTransport`] and via [`Runtime::create_transport`].
 pub struct OmniaRuntime {
     vault: Box<dyn WasiVaultCtx>,
     locker_id: String,
+    transport: BoxedPostJsonTransport,
     rt: tokio::runtime::Runtime,
 }
 
 impl OmniaRuntime {
     /// Creates an Omnia-backed runtime with the given vault backend and locker ID.
     ///
-    /// Returns [`RuntimeError::Other`] if the tokio runtime cannot be created.
+    /// Returns [`RuntimeError::Other`] if the tokio runtime or the internal HTTP transport cannot be created.
     pub fn new(
         vault: Box<dyn WasiVaultCtx>,
         locker_id: impl Into<String>,
@@ -27,9 +34,16 @@ impl OmniaRuntime {
             .enable_all()
             .build()
             .map_err(|e| RuntimeError::Other(format!("failed to create async runtime: {e}")))?;
+
+        let transport: BoxedPostJsonTransport =
+            Box::new(OmniaWasiHttpPostJson::new().map_err(|e| {
+                RuntimeError::Other(format!("failed to create HTTP transport: {e}"))
+            })?);
+
         Ok(Self {
             vault,
             locker_id: locker_id.into(),
+            transport,
             rt,
         })
     }
@@ -59,6 +73,22 @@ impl Runtime for OmniaRuntime {
                 String::from_utf8(bytes)
                     .map_err(|e| RuntimeError::Other(format!("secret is not valid UTF-8: {e}")))
             })
+    }
+
+    fn post_json(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: &Value,
+    ) -> Result<Vec<u8>, TransportError> {
+        self.transport
+            .post_json(url, headers, body)
+    }
+
+    fn create_transport(&self) -> Result<BoxedPostJsonTransport, RuntimeError> {
+        let t = OmniaWasiHttpPostJson::new()
+            .map_err(|e| RuntimeError::Other(format!("failed to create transport: {e}")))?;
+        Ok(Box::new(t))
     }
 }
 

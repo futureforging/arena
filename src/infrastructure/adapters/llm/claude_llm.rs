@@ -2,7 +2,7 @@ use serde_json::{json, Map, Value};
 
 use crate::core::{
     llm::{ChatMessage, Llm, LlmCompletion},
-    transport::PostJsonTransport,
+    transport::{BoxedPostJsonTransport, IntoBoxedPostJsonTransport},
 };
 
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -13,10 +13,10 @@ const MAX_TOKENS: u32 = 4096;
 
 /// Calls the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages).
 ///
-/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. via [`crate::core::runtime::Runtime::get_secret`] from [`crate::infrastructure::adapters::runtime::OmniaRuntime`] or another [`Runtime`](crate::core::runtime::Runtime) adapter), inject a [`PostJsonTransport`](crate::core::transport::PostJsonTransport) (e.g. [`OmniaWasiHttpPostJson`](crate::infrastructure::adapters::runtime::OmniaWasiHttpPostJson)), then pass an optional **base** system prompt (merged per request with the session system prompt).
+/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. via [`crate::core::runtime::Runtime::get_secret`] from [`crate::infrastructure::adapters::runtime::OmniaRuntime`] or another [`Runtime`](crate::core::runtime::Runtime) adapter), supply HTTP via [`IntoBoxedPostJsonTransport`] (e.g. [`crate::core::runtime::Runtime::create_transport`] or a concrete [`PostJsonTransport`](crate::core::transport::PostJsonTransport) such as [`OmniaWasiHttpPostJson`](crate::infrastructure::adapters::runtime::OmniaWasiHttpPostJson)), then pass an optional **base** system prompt (merged per request with the session system prompt).
 pub struct ClaudeLlm {
     api_key: String,
-    transport: Box<dyn PostJsonTransport + Send + Sync>,
+    transport: BoxedPostJsonTransport,
     model: String,
     system_prompt: Option<String>,
 }
@@ -26,13 +26,13 @@ impl ClaudeLlm {
     pub fn new(
         api_key: impl Into<String>,
         system_prompt: Option<String>,
-        transport: impl PostJsonTransport + Send + Sync + 'static,
+        transport: impl IntoBoxedPostJsonTransport,
     ) -> Self {
         let api_key = api_key.into();
         let model = DEFAULT_MODEL.to_string();
         Self {
             api_key,
-            transport: Box::new(transport),
+            transport: transport.into_boxed_post_json_transport(),
             model,
             system_prompt,
         }

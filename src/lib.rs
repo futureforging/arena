@@ -15,7 +15,9 @@ pub use core::{
         merge_system_prompts, ActiveSession, ReceiveMessageError, Session, StartSessionError,
         ASSISTANT_ROLE, USER_ROLE,
     },
-    transport::{PostJsonTransport, TransportError},
+    transport::{
+        BoxedPostJsonTransport, IntoBoxedPostJsonTransport, PostJsonTransport, TransportError,
+    },
 };
 
 pub use application::factories::create_agent::create_agent;

@@ -30,3 +30,25 @@ pub trait PostJsonTransport {
         body: &Value,
     ) -> Result<Vec<u8>, TransportError>;
 }
+
+/// Owned [`PostJsonTransport`] for injection into adapters that store HTTP behind a trait object.
+pub type BoxedPostJsonTransport = Box<dyn PostJsonTransport + Send + Sync>;
+
+/// Converts a concrete [`PostJsonTransport`] or an existing boxed transport into a single
+/// [`BoxedPostJsonTransport`] without double-boxing.
+pub trait IntoBoxedPostJsonTransport {
+    /// Consumes `self` and returns one owned trait object.
+    fn into_boxed_post_json_transport(self) -> BoxedPostJsonTransport;
+}
+
+impl<T: PostJsonTransport + Send + Sync + 'static> IntoBoxedPostJsonTransport for T {
+    fn into_boxed_post_json_transport(self) -> BoxedPostJsonTransport {
+        Box::new(self)
+    }
+}
+
+impl IntoBoxedPostJsonTransport for BoxedPostJsonTransport {
+    fn into_boxed_post_json_transport(self) -> BoxedPostJsonTransport {
+        self
+    }
+}

@@ -1,7 +1,6 @@
 use aria_poc_2::{
-    Arena, ArenaHttpClient, LoggingLevel, OmniaRuntime, OmniaWasiHttpPostJson,
-    OmniaWasiVaultAnthropicLocal, SecureAgent, Session, ShellEnvironment,
-    ANTHROPIC_VAULT_LOCKER_ID, ASSISTANT_ROLE, USER_ROLE,
+    Arena, ArenaHttpClient, LoggingLevel, OmniaRuntime, OmniaWasiVaultAnthropicLocal, Runtime,
+    SecureAgent, Session, ShellEnvironment, ANTHROPIC_VAULT_LOCKER_ID, ASSISTANT_ROLE, USER_ROLE,
 };
 
 /// Base system instructions merged with the per-session prompt on every completion (model-/adapter-level).
@@ -67,7 +66,7 @@ fn play_knock_knock_via_arena(agent: &mut SecureAgent, arena: &dyn Arena) {
 }
 
 fn main() {
-    // Runtime (vault for API key)
+    // Runtime (vault for API key + outbound HTTP)
     let vault = Box::new(OmniaWasiVaultAnthropicLocal::new(None));
     let runtime = match OmniaRuntime::new(vault, ANTHROPIC_VAULT_LOCKER_ID) {
         Ok(rt) => rt,
@@ -77,17 +76,8 @@ fn main() {
         },
     };
 
-    // Transport (outbound HTTP for Claude API)
-    let transport = match OmniaWasiHttpPostJson::new() {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("Failed to create OmniaWasiHttpPostJson: {e:?}");
-            std::process::exit(1);
-        },
-    };
-
     // Arena client (talks to arena-stub on localhost:3000)
-    let arena_transport = match OmniaWasiHttpPostJson::new() {
+    let arena_transport = match runtime.create_transport() {
         Ok(t) => t,
         Err(e) => {
             eprintln!("Failed to create arena transport: {e:?}");
@@ -96,10 +86,9 @@ fn main() {
     };
     let arena = ArenaHttpClient::new("http://127.0.0.1:3000", arena_transport);
 
-    // SecureAgent (Claude-backed joke teller)
+    // SecureAgent (Claude-backed joke teller) — only needs runtime
     let mut agent = match SecureAgent::new(
         runtime,
-        transport,
         Some(BASE_SYSTEM_PROMPT.to_string()),
         ShellEnvironment {
             logging_level: LoggingLevel::None,

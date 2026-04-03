@@ -4,25 +4,24 @@ use crate::{
     core::{
         agent::Agent,
         runtime::{Runtime, RuntimeError, ANTHROPIC_API_KEY_SECRET},
-        transport::PostJsonTransport,
     },
     infrastructure::adapters::{environment::ShellEnvironment, llm::ClaudeLlm},
 };
 
 const DISPLAY_NAME: &str = "SecureAgent";
 
-/// Shell-backed environment, Anthropic [`ClaudeLlm`], fixed display name **SecureAgent**. The API key is resolved only in [`SecureAgent::new`] via a [`Runtime`] (see [`Runtime::get_secret`]); the core [`Agent`] does not carry a runtime. Outbound JSON POSTs use the injected [`PostJsonTransport`].
+/// Shell-backed environment, Anthropic [`ClaudeLlm`], fixed display name **SecureAgent**. The API key and outbound HTTP are resolved only in [`SecureAgent::new`] via a [`Runtime`] (see [`Runtime::get_secret`] and [`Runtime::create_transport`]); the core [`Agent`] does not carry a runtime.
 pub struct SecureAgent(Agent<ShellEnvironment, ClaudeLlm>);
 
 impl SecureAgent {
-    /// Assembles the core [`Agent`] with [`ShellEnvironment`] and [`ClaudeLlm::new`], resolving the API key via [`Runtime::get_secret`] and not retaining the runtime on the agent.
-    pub fn new<R: Runtime, T: PostJsonTransport + Send + Sync + 'static>(
+    /// Assembles the core [`Agent`] with [`ShellEnvironment`] and [`ClaudeLlm::new`], resolving the API key via [`Runtime::get_secret`], the HTTP transport via [`Runtime::create_transport`], and not retaining the runtime on the agent.
+    pub fn new<R: Runtime>(
         runtime: R,
-        transport: T,
         system_prompt: Option<String>,
         environment: ShellEnvironment,
     ) -> Result<Self, RuntimeError> {
         let api_key = runtime.get_secret(ANTHROPIC_API_KEY_SECRET)?;
+        let transport = runtime.create_transport()?;
         Ok(Self(Agent {
             name: DISPLAY_NAME.to_string(),
             environment,
