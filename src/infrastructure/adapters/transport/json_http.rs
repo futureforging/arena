@@ -3,6 +3,8 @@ use std::time::Duration;
 use reqwest::blocking::Client;
 use serde_json::Value;
 
+use crate::core::transport::{PostJsonTransport, TransportError};
+
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Blocking HTTP client for JSON request bodies; returns raw response bytes on success.
@@ -58,5 +60,23 @@ impl JsonHttp {
             return Err(format!("HTTP {status}: {text}"));
         }
         Ok(bytes.to_vec())
+    }
+}
+
+impl Default for JsonHttp {
+    /// Same as [`JsonHttp::new`](JsonHttp::new) (120 second request timeout).
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PostJsonTransport for JsonHttp {
+    fn post_json(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: &Value,
+    ) -> Result<Vec<u8>, TransportError> {
+        JsonHttp::post_json(self, url, headers, body).map_err(TransportError::Other)
     }
 }

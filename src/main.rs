@@ -14,12 +14,14 @@ pub use core::{
         merge_system_prompts, ActiveSession, ReceiveMessageError, Session, StartSessionError,
         ASSISTANT_ROLE, USER_ROLE,
     },
+    transport::{PostJsonTransport, TransportError},
 };
 
 pub use application::factories::create_agent::create_agent;
 pub use infrastructure::adapters::{
     environment::ShellEnvironment,
     llm::{ClaudeLlm, DummyLlm, KnockKnockAudienceLlm},
+    transport::JsonHttp,
     OmniaRuntime, SecureAgent, VaultAnthropicLocalFile, ANTHROPIC_VAULT_LOCKER_ID,
     ANTHROPIC_VAULT_SECRET_ID,
 };
@@ -109,6 +111,7 @@ fn main() {
 
     let mut agent = match SecureAgent::new(
         runtime,
+        JsonHttp::new(),
         Some(BASE_SYSTEM_PROMPT.to_string()),
         ShellEnvironment {
             logging_level: LoggingLevel::None,

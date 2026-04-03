@@ -1,8 +1,8 @@
 use serde_json::{json, Map, Value};
 
-use crate::{
-    core::llm::{ChatMessage, Llm, LlmCompletion},
-    infrastructure::adapters::transport::JsonHttp,
+use crate::core::{
+    llm::{ChatMessage, Llm, LlmCompletion},
+    transport::PostJsonTransport,
 };
 
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -13,23 +13,26 @@ const MAX_TOKENS: u32 = 4096;
 
 /// Calls the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages).
 ///
-/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. via [`crate::core::runtime::Runtime::get_secret`] from [`crate::infrastructure::adapters::runtime::OmniaRuntime`] or another [`Runtime`](crate::core::runtime::Runtime) adapter), then pass the key and an optional **base** system prompt (merged per request with the session system prompt).
+/// Construct with [`ClaudeLlm::new`]. Load the API key elsewhere (e.g. via [`crate::core::runtime::Runtime::get_secret`] from [`crate::infrastructure::adapters::runtime::OmniaRuntime`] or another [`Runtime`](crate::core::runtime::Runtime) adapter), inject a [`PostJsonTransport`](crate::core::transport::PostJsonTransport) (e.g. [`JsonHttp`](crate::infrastructure::adapters::transport::JsonHttp)), then pass an optional **base** system prompt (merged per request with the session system prompt).
 pub struct ClaudeLlm {
     api_key: String,
-    http: JsonHttp,
+    transport: Box<dyn PostJsonTransport + Send + Sync>,
     model: String,
     system_prompt: Option<String>,
 }
 
 impl ClaudeLlm {
     /// Creates a client. Pass [`None`] for `system_prompt` to omit a base system block when merging (unusual).
-    pub fn new(api_key: impl Into<String>, system_prompt: Option<String>) -> Self {
+    pub fn new(
+        api_key: impl Into<String>,
+        system_prompt: Option<String>,
+        transport: impl PostJsonTransport + Send + Sync + 'static,
+    ) -> Self {
         let api_key = api_key.into();
         let model = DEFAULT_MODEL.to_string();
-        let http = JsonHttp::new();
         Self {
             api_key,
-            http,
+            transport: Box::new(transport),
             model,
             system_prompt,
         }
@@ -70,8 +73,9 @@ impl ClaudeLlm {
             ("content-type", "application/json"),
         ];
         let bytes = self
-            .http
-            .post_json(ANTHROPIC_MESSAGES_URL, &headers, body)?;
+            .transport
+            .post_json(ANTHROPIC_MESSAGES_URL, &headers, body)
+            .map_err(|e| e.to_string())?;
 
         let v: serde_json::Value =
             serde_json::from_slice(&bytes).map_err(|e| format!("invalid JSON: {e}"))?;
