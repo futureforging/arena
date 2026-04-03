@@ -6,6 +6,9 @@ use super::{
     },
 };
 
+/// Label for [`Agent::receive_message`] printed incoming lines (`"{label} <- {message}"`).
+const PEER_INCOMING_PRINT_LABEL: &str = "peer";
+
 /// An autonomous agent identified by name.
 pub struct Agent<E: Environment, L: Llm> {
     /// Display name for this agent.
@@ -63,7 +66,7 @@ impl<E: Environment, L: Llm> Agent<E, L> {
             .map(|active| active.session)
     }
 
-    /// Records a **peer** message, completes with [`Llm::complete`](Llm::complete), logs [`LlmCompletion`](crate::core::llm::LlmCompletion) request JSON at [`LogMessageLevel::Verbose`] when the adapter supplies it and the environment allows verbose logs, then appends this **Agent**’s reply (under [`ActiveSession::agent_role`](crate::core::session::ActiveSession)) and prints it.
+    /// Records a **peer** message, prints the incoming line as **`peer <- {message}`** (always, independent of logging level), completes with [`Llm::complete`](Llm::complete), logs [`LlmCompletion`](crate::core::llm::LlmCompletion) request JSON at [`LogMessageLevel::Verbose`] when the adapter supplies it and the environment allows verbose logs, then appends this **Agent**’s reply (under [`ActiveSession::agent_role`](crate::core::session::ActiveSession)) and prints it as **`{name} -> {reply}`**.
     ///
     /// Returns [`ReceiveMessageError::NoActiveSession`] if [`start_session`](Self::start_session) was not called or after [`stop_session`](Self::stop_session).
     pub fn receive_message(&mut self, message: &str) -> Result<String, ReceiveMessageError> {
@@ -82,7 +85,7 @@ impl<E: Environment, L: Llm> Agent<E, L> {
                 content: message.to_string(),
             });
 
-        self.log(&format!("{} <- {}", self.name, message), LogMessageLevel::Standard);
+        self.print(&format!("{PEER_INCOMING_PRINT_LABEL} <- {message}"));
 
         let system = merge_system_prompts(
             self.llm
@@ -166,7 +169,7 @@ mod tests {
             agent
                 .environment
                 .lines(),
-            vec![format!("a -> {}", STUB_LLM_REPLY)]
+            vec![String::from("peer <- ping"), format!("a -> {}", STUB_LLM_REPLY),]
         );
     }
 
@@ -244,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn receive_message_logs_incoming_message_at_standard() {
+    fn receive_message_prints_incoming_peer_line_not_only_via_log_filter() {
         let mut agent = agent_with_stub();
         agent
             .start_session(Session::new("task"), ASSISTANT_ROLE, USER_ROLE)
@@ -255,8 +258,14 @@ mod tests {
         assert_eq!(
             agent
                 .environment
+                .lines(),
+            vec![String::from("peer <- ping"), format!("a -> {}", STUB_LLM_REPLY),]
+        );
+        assert_eq!(
+            agent
+                .environment
                 .logged_lines(),
-            vec![String::from("a <- ping")]
+            Vec::<String>::new()
         );
     }
 
@@ -305,11 +314,9 @@ mod tests {
 
     #[test]
     fn receive_message_logs_request_body_json_at_verbose_only() {
-        let cases: &[VerboseLoggingCase] = &[
-            (LoggingLevel::Verbose, &["a <- hi", STUB_REQUEST_JSON]),
-            (LoggingLevel::Standard, &["a <- hi"]),
-        ];
-        for &(level, expected) in cases {
+        let cases: &[VerboseLoggingCase] =
+            &[(LoggingLevel::Verbose, &[STUB_REQUEST_JSON]), (LoggingLevel::Standard, &[])];
+        for &(level, expected_logged) in cases {
             let mut agent = Agent {
                 name: String::from("a"),
                 environment: InMemoryEnvironment::new(level),
@@ -322,7 +329,7 @@ mod tests {
             agent
                 .receive_message("hi")
                 .unwrap();
-            let expected: Vec<String> = expected
+            let expected_logged: Vec<String> = expected_logged
                 .iter()
                 .copied()
                 .map(String::from)
@@ -331,7 +338,13 @@ mod tests {
                 agent
                     .environment
                     .logged_lines(),
-                expected
+                expected_logged
+            );
+            assert_eq!(
+                agent
+                    .environment
+                    .lines(),
+                vec![String::from("peer <- hi"), format!("a -> {}", STUB_LLM_REPLY),]
             );
         }
     }

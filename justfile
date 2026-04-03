@@ -40,10 +40,21 @@ verify: fmt lint build test
 
 precommit: verify
 
-## Run the main agent (knock-knock demo, in-process peer)
+## Run the main agent (knock-knock demo via HTTP to arena-stub on 127.0.0.1:3000)
 
 run-agent:
     cargo run -p aria-poc-2
+
+## Run the full knock-knock demo (arena-stub + agent).
+## Starts arena-stub in background, runs agent, then stops arena-stub.
+
+demo:
+    @echo "Starting arena-stub..."
+    @cargo run -p arena-stub &
+    @sleep 1
+    @echo "Running agent..."
+    @cargo run -p aria-poc-2
+    @echo "Demo complete."
 
 ## Run the arena stub (HTTP audience server on 127.0.0.1:3000)
 

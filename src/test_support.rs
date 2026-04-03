@@ -10,6 +10,7 @@ use crate::core::{
     agent::Agent,
     environment::{Environment, LoggingLevel},
     llm::{ChatMessage, Llm, LlmCompletion},
+    transport::{PostJsonTransport, TransportError},
 };
 
 // ---------------------------------------------------------------------------
@@ -177,5 +178,50 @@ impl Llm for EmptyReplyLlm {
             reply: String::new(),
             request_body_json: None,
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Transport doubles
+// ---------------------------------------------------------------------------
+
+/// Configurable [`PostJsonTransport`] for tests. Returns `response_bytes` on every call,
+/// or `Err(TransportError::Other(...))` if `error` is set.
+pub struct StubPostJsonTransport {
+    response_bytes: Vec<u8>,
+    error: Option<String>,
+}
+
+impl StubPostJsonTransport {
+    /// Creates a transport that always returns the given bytes.
+    pub fn with_response(response_bytes: Vec<u8>) -> Self {
+        Self {
+            response_bytes,
+            error: None,
+        }
+    }
+
+    /// Creates a transport that always returns the given error.
+    pub fn with_error(msg: impl Into<String>) -> Self {
+        Self {
+            response_bytes: Vec::new(),
+            error: Some(msg.into()),
+        }
+    }
+}
+
+impl PostJsonTransport for StubPostJsonTransport {
+    fn post_json(
+        &self,
+        _url: &str,
+        _headers: &[(&str, &str)],
+        _body: &serde_json::Value,
+    ) -> Result<Vec<u8>, TransportError> {
+        if let Some(ref err) = self.error {
+            return Err(TransportError::Other(err.clone()));
+        }
+        Ok(self
+            .response_bytes
+            .clone())
     }
 }

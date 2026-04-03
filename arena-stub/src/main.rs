@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// Display name for the arena-stub process (mirrors `aria-poc-2` `Agent::print`: `"{name} -> {reply}"`).
 const STUB_AGENT_NAME: &str = "agent";
 
-/// Label for incoming teller lines (mirrors `aria-poc-2` `Agent::receive_message` standard log: `"{name} <- {message}"`).
+/// Label for incoming teller lines (mirrors `aria-poc-2` `Agent::receive_message` print: `peer <- {message}`).
 const PEER_LABEL: &str = "peer";
 
 #[derive(Clone)]

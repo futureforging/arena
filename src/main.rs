@@ -1,28 +1,7 @@
-mod application;
-mod core;
-mod infrastructure;
-
-#[cfg(test)]
-mod test_support;
-
-pub use core::{
-    agent::Agent,
-    environment::{log_message_is_allowed, Environment, LogMessageLevel, LoggingLevel},
-    llm::{ChatMessage, Llm, LlmCompletion},
-    runtime::{Runtime, RuntimeError, ANTHROPIC_API_KEY_SECRET},
-    session::{
-        merge_system_prompts, ActiveSession, ReceiveMessageError, Session, StartSessionError,
-        ASSISTANT_ROLE, USER_ROLE,
-    },
-    transport::{PostJsonTransport, TransportError},
-};
-
-pub use application::factories::create_agent::create_agent;
-pub use infrastructure::adapters::{
-    environment::ShellEnvironment,
-    llm::{ClaudeLlm, DummyLlm, KnockKnockAudienceLlm},
-    OmniaRuntime, OmniaWasiHttpPostJson, OmniaWasiVaultAnthropicLocal, SecureAgent,
-    ANTHROPIC_VAULT_LOCKER_ID, ANTHROPIC_VAULT_SECRET_ID,
+use aria_poc_2::{
+    Arena, ArenaHttpClient, LoggingLevel, OmniaRuntime, OmniaWasiHttpPostJson,
+    OmniaWasiVaultAnthropicLocal, SecureAgent, Session, ShellEnvironment,
+    ANTHROPIC_VAULT_LOCKER_ID, ASSISTANT_ROLE, USER_ROLE,
 };
 
 /// Base system instructions merged with the per-session prompt on every completion (model-/adapter-level).
@@ -44,16 +23,7 @@ Turn order:
 
 Be concise at every step."#;
 
-fn play_knock_knock(
-    peer: &mut Agent<ShellEnvironment, KnockKnockAudienceLlm>,
-    agent: &mut SecureAgent,
-) {
-    // Transcript roles must match Anthropic Messages API: Claude outputs `assistant`, canned lines are `user`,
-    // so each turn ends with `user` before the next completion (see `Agent::receive_message`).
-    if let Err(e) = peer.start_session(Session::new(""), USER_ROLE, ASSISTANT_ROLE) {
-        eprintln!("Failed to start peer session: {e:?}");
-        std::process::exit(1);
-    }
+fn play_knock_knock_via_arena(agent: &mut SecureAgent, arena: &dyn Arena) {
     if let Err(e) = agent.start_session(
         Session::new(KNOCK_KNOCK_TELLER_SESSION_PROMPT),
         ASSISTANT_ROLE,
@@ -63,42 +33,41 @@ fn play_knock_knock(
         std::process::exit(1);
     }
 
-    let mut peer_recv = |text: &str| -> String {
-        peer.receive_message(text)
-            .unwrap_or_else(|e| {
-                eprintln!("peer receive_message failed: {e:?}");
+    // The agent needs a first message to respond to.
+    // Send the synthetic greeting as if it came from the peer.
+    let mut agent_reply = agent
+        .receive_message(SYNTHETIC_PEER_GREETING)
+        .unwrap_or_else(|e| {
+            eprintln!("agent receive_message failed: {e:?}");
+            std::process::exit(1);
+        });
+
+    // Exchange messages via the arena until the peer sends an empty reply
+    // or we hit the turn limit (knock-knock is 5 exchanges).
+    let max_turns = 10;
+    for _ in 0..max_turns {
+        let peer_reply = match arena.send(&agent_reply) {
+            Ok(reply) if reply.is_empty() => break,
+            Ok(reply) => reply,
+            Err(e) => {
+                eprintln!("arena send failed: {e}");
                 std::process::exit(1);
-            })
-    };
-    let mut agent_recv = |text: &str| -> String {
-        agent
-            .receive_message(text)
+            },
+        };
+
+        agent_reply = agent
+            .receive_message(&peer_reply)
             .unwrap_or_else(|e| {
                 eprintln!("agent receive_message failed: {e:?}");
                 std::process::exit(1);
-            })
-    };
+            });
+    }
 
-    let invitation = agent_recv(SYNTHETIC_PEER_GREETING);
-    let after_yes = peer_recv(&invitation);
-    let after_whos_there = peer_recv(&agent_recv(&after_yes));
-    let after_setup_who = peer_recv(&agent_recv(&after_whos_there));
-    let _haha = peer_recv(&agent_recv(&after_setup_who));
-    let _parting = agent_recv(&_haha);
-
-    let _ = peer.stop_session();
     let _ = agent.stop_session();
 }
 
 fn main() {
-    let mut peer = create_agent(
-        "Peer",
-        ShellEnvironment {
-            logging_level: LoggingLevel::None,
-        },
-        KnockKnockAudienceLlm::new(),
-    );
-
+    // Runtime (vault for API key)
     let vault = Box::new(OmniaWasiVaultAnthropicLocal::new(None));
     let runtime = match OmniaRuntime::new(vault, ANTHROPIC_VAULT_LOCKER_ID) {
         Ok(rt) => rt,
@@ -108,6 +77,7 @@ fn main() {
         },
     };
 
+    // Transport (outbound HTTP for Claude API)
     let transport = match OmniaWasiHttpPostJson::new() {
         Ok(t) => t,
         Err(e) => {
@@ -116,6 +86,17 @@ fn main() {
         },
     };
 
+    // Arena client (talks to arena-stub on localhost:3000)
+    let arena_transport = match OmniaWasiHttpPostJson::new() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Failed to create arena transport: {e:?}");
+            std::process::exit(1);
+        },
+    };
+    let arena = ArenaHttpClient::new("http://127.0.0.1:3000", arena_transport);
+
+    // SecureAgent (Claude-backed joke teller)
     let mut agent = match SecureAgent::new(
         runtime,
         transport,
@@ -131,5 +112,5 @@ fn main() {
         },
     };
 
-    play_knock_knock(&mut peer, &mut agent);
+    play_knock_knock_via_arena(&mut agent, &arena);
 }

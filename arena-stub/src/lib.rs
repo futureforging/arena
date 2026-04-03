@@ -7,7 +7,7 @@ pub const ARENA_STUB_LISTEN_PORT: u16 = 3000;
 pub const ARENA_STUB_MESSAGE_URL: &str = "http://127.0.0.1:3000/message";
 
 /// When the teller sends this exact line, the scripted audience sequence restarts from step 0 (same line as turn 1 of a new game).
-pub const INVITATION_RESTART_MESSAGE: &str = "Would you like to hear a knock-knock joke?";
+pub const INVITATION_RESTART_MESSAGE: &str = "Would you like to hear a knock knock joke?";
 
 /// First non-empty line, first word, without trailing ASCII punctuation (matches `KnockKnockAudienceLlm`).
 pub fn parse_setup_word(text: &str) -> Option<String> {
