@@ -5,4 +5,7 @@ pub mod runtime;
 pub mod transport;
 
 pub use agent::SecureAgent;
-pub use runtime::{AnthropicApiKeyError, LocalFileRuntime, ANTHROPIC_API_KEY_SECRET};
+pub use runtime::{
+    AnthropicApiKeyError, LocalFileRuntime, OmniaRuntime, VaultAnthropicLocalFile,
+    ANTHROPIC_API_KEY_SECRET, ANTHROPIC_VAULT_LOCKER_ID, ANTHROPIC_VAULT_SECRET_ID,
+};

@@ -17,7 +17,8 @@ pub use application::factories::create_agent::create_agent;
 pub use infrastructure::adapters::{
     environment::ShellEnvironment,
     llm::{ClaudeLlm, DummyLlm, KnockKnockAudienceLlm},
-    AnthropicApiKeyError, LocalFileRuntime, SecureAgent, ANTHROPIC_API_KEY_SECRET,
+    AnthropicApiKeyError, LocalFileRuntime, OmniaRuntime, SecureAgent, VaultAnthropicLocalFile,
+    ANTHROPIC_API_KEY_SECRET, ANTHROPIC_VAULT_LOCKER_ID, ANTHROPIC_VAULT_SECRET_ID,
 };
 
 /// Base system instructions merged with the per-session prompt on every completion (model-/adapter-level).
@@ -86,7 +87,6 @@ fn play_knock_knock(
 }
 
 fn main() {
-    let runtime = LocalFileRuntime::new(None);
     let mut peer = create_agent(
         "Peer",
         ShellEnvironment {
@@ -94,6 +94,16 @@ fn main() {
         },
         KnockKnockAudienceLlm::new(),
     );
+
+    // Swap to `LocalFileRuntime::new(None)` if you want direct file reads without the Omnia vault stack.
+    let vault = Box::new(VaultAnthropicLocalFile::new(None));
+    let runtime = match OmniaRuntime::new(vault, ANTHROPIC_VAULT_LOCKER_ID) {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("Failed to create OmniaRuntime: {e:?}");
+            std::process::exit(1);
+        },
+    };
 
     let mut agent = match SecureAgent::new(
         runtime,
