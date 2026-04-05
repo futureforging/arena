@@ -1,9 +1,9 @@
-use aria_core::llm::{ChatMessage, Llm, LlmCompletion};
+use secure_core::llm::{ChatMessage, Llm, LlmCompletion};
 use bytes::Bytes;
 use http_body_util::Full;
 use serde_json::{json, Map, Value};
 
-const VAULT_LOCKER_ID: &str = "aria-anthropic";
+const VAULT_LOCKER_ID: &str = "secure-anthropic";
 const VAULT_SECRET_ID: &str = "anthropic_api_key";
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";

@@ -10,9 +10,9 @@ use omnia::{Backend, FromEnv};
 use omnia_wasi_vault::{FutureResult, Locker, WasiVaultCtx};
 
 /// Locker id expected by this vault backend (must match the secure-agent guest).
-pub const ANTHROPIC_VAULT_LOCKER_ID: &str = "aria-anthropic";
+pub const ANTHROPIC_VAULT_LOCKER_ID: &str = "secure-anthropic";
 
-/// Secret id for the Anthropic API key (must match `anthropic_api_key` in `aria-core` and the guest).
+/// Secret id for the Anthropic API key (must match `anthropic_api_key` in `secure-core` and the guest).
 pub const ANTHROPIC_VAULT_SECRET_ID: &str = "anthropic_api_key";
 
 /// Default filename for the Anthropic API key at the workspace root (parent of `runtime/`).
@@ -27,7 +27,7 @@ pub struct VaultConnectOptions {
 
 impl FromEnv for VaultConnectOptions {
     fn from_env() -> anyhow::Result<Self> {
-        let key_file = std::env::var("ARIA_ANTHROPIC_API_KEY_FILE")
+        let key_file = std::env::var("SECURE_ANTHROPIC_API_KEY_FILE")
             .ok()
             .map(PathBuf::from);
         Ok(Self {
@@ -181,7 +181,7 @@ mod tests {
         })
         .await?;
         let outcome = vault
-            .open_locker("not-aria-anthropic".to_string())
+            .open_locker("not-secure-anthropic".to_string())
             .await;
         let err = match outcome {
             Ok(_) => {
@@ -198,7 +198,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn open_locker_accepts_aria_anthropic() -> Result<(), anyhow::Error> {
+    async fn open_locker_accepts_secure_anthropic() -> Result<(), anyhow::Error> {
         let mut tmp = NamedTempFile::new()?;
         writeln!(tmp, "  key-from-test  ")?;
         let vault = VaultAnthropicLocalFile::connect_with(VaultConnectOptions {

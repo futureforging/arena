@@ -1,4 +1,4 @@
-//! Shared test doubles and fixtures for `aria-core` and downstream crates.
+//! Shared test doubles and fixtures for `secure-core` and downstream crates.
 //!
 //! Agent / [`Environment`] / [`Llm`] fakes, transport stubs, plus temp-file helpers for runtime adapter tests.
 

@@ -1,4 +1,4 @@
-use aria_core::environment::{Environment, LoggingLevel};
+use secure_core::environment::{Environment, LoggingLevel};
 
 pub struct WasiEnvironment;
 

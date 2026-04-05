@@ -55,7 +55,7 @@ async fn play_handler_inner(body: Bytes) -> anyhow::Result<Json<Value>> {
 
     let llm = WasiLlm::new().await.context("initializing LLM")?;
     let environment = WasiEnvironment;
-    let agent = aria_core::agent::Agent {
+    let agent = secure_core::agent::Agent {
         name: String::from("SecureAgent"),
         environment,
         llm,

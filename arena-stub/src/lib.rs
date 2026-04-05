@@ -1,4 +1,4 @@
-//! HTTP arena stub: scripted knock-knock audience and PSI peer (aligned with `aria-core` games).
+//! HTTP arena stub: scripted knock-knock audience and PSI peer (aligned with `secure-core` games).
 
 pub mod psi_peer;
 
@@ -115,7 +115,7 @@ pub fn process_turn(state: &mut PeerState, message: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use aria_core::games::sha256_hex;
+    use secure_core::games::sha256_hex;
 
     use super::{
         audience_reply, detect_game, parse_setup_word, process_audience_turn, process_turn,

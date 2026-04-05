@@ -1,10 +1,10 @@
 [package]
-name = "aria-runtime"
+name = "secure-runtime"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "aria-runtime"
+name = "secure-runtime"
 path = "src/main.rs"
 
 [dependencies]

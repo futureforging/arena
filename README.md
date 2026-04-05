@@ -1,19 +1,19 @@
-# aria-poc-2
+# Arena
 
 This repository is a **Cargo workspace** for [Scaling Trust Arena](https://arena.nicolaos.org/) peer-to-peer agent demos. The workspace root has **no** `[package]` — only member crates.
 
 ## Architecture
 
-The workspace uses a **hexagonal** (ports-and-adapters) shape: **`aria-core`** is the **inner hexagon**—domain types and **ports** only (`Arena`, `Llm`, `Environment`, `Game`, etc.), with no Omnia or WASI dependencies. **`aria-secure-agent`** is the **application**: it implements the secure agent and games against those ports and is built as the WASM guest. **`aria-runtime`** is **infrastructure** on the host: it loads the guest `.wasm` and wires Omnia/WASI **adapters** (vault, HTTP, keyvalue, telemetry); it intentionally does **not** depend on `aria-core` or `aria-secure-agent`. **`arena-stub`** is a **simulation** of a real arena peer—a scripted local HTTP process for development—rather than the production [Scaling Trust Arena](https://arena.nicolaos.org/) service.
+The workspace uses a **hexagonal** (ports-and-adapters) shape: **`secure-core`** is the **inner hexagon**—domain types and **ports** only (`Arena`, `Llm`, `Environment`, `Game`, etc.), with no Omnia or WASI dependencies. **`secure-agent`** is the **application**: it implements the secure agent and games against those ports and is built as the WASM guest. **`secure-runtime`** is **infrastructure** on the host: it loads the guest `.wasm` and wires Omnia/WASI **adapters** (vault, HTTP, keyvalue, telemetry); it intentionally does **not** depend on `secure-core` or `secure-agent`. **`arena-stub`** is a **simulation** of a real arena peer—a scripted local HTTP process for development—rather than the production [Scaling Trust Arena](https://arena.nicolaos.org/) service. The **`arena-stub`** crate is only this local simulator; the **`Arena`** port and the JSON field **`arena_url`** refer to whichever peer you point at (stub or production), not the crate name.
 
 | Directory | Crate | Role |
 | --- | --- | --- |
-| `core/` | `aria-core` | Shared domain types, trait ports (`Arena`, `Llm`, `Environment`, `Game`), `play_game`, `KnockKnockGame`, `PsiGame` (SHA-256 hash intersection), and tests. |
-| `secure-agent/` | `aria-secure-agent` | **WASI guest** (`wasm32-wasip2` cdylib): constrained agent that handles `POST /play`, uses WASI vault for the Anthropic API key and WASI HTTP for the arena and Anthropic APIs. |
-| `runtime/` | `aria-runtime` | **Omnia host** binary: loads the guest `.wasm`, links vault + HTTP + OpenTelemetry + **in-memory `wasi:keyvalue`** (`KeyValueDefault`; required because the guest’s HTTP stack imports keyvalue). |
+| `core/` | `secure-core` | Shared domain types, trait ports (`Arena`, `Llm`, `Environment`, `Game`), `play_game`, `KnockKnockGame`, `PsiGame` (SHA-256 hash intersection), and tests. |
+| `secure-agent/` | `secure-agent` | **WASI guest** (`wasm32-wasip2` cdylib): constrained agent that handles `POST /play`, uses WASI vault for the Anthropic API key and WASI HTTP for the arena and Anthropic APIs. |
+| `runtime/` | `secure-runtime` | **Omnia host** binary: loads the guest `.wasm`, links vault + HTTP + OpenTelemetry + **in-memory `wasi:keyvalue`** (`KeyValueDefault`; required because the guest’s HTTP stack imports keyvalue). |
 | `arena-stub/` | `arena-stub` | Local HTTP **arena** peer: scripted knock-knock audience or PSI peer via `POST /message` (game inferred from the agent’s first line after reset). |
 
-**Dependency direction:** `aria-core` has no dependency on other members. `aria-secure-agent` and `arena-stub` depend on `aria-core`. `aria-runtime` does **not** depend on `aria-core` or `aria-secure-agent` (it loads the guest wasm from disk).
+**Dependency direction:** `secure-core` has no dependency on other members. `secure-agent` and `arena-stub` depend on `secure-core`. `secure-runtime` does **not** depend on `secure-core` or `secure-agent` (it loads the guest wasm from disk).
 
 The guest uses Axum’s `IntoResponse` for HTTP handlers instead of `omnia_sdk::HttpResult`: `omnia-sdk` 0.30.0 does not currently compile on this toolchain, while the WASI/Omnia crates used for vault and HTTP do.
 
@@ -46,7 +46,7 @@ just run-arena
 
 # 2) Terminal B — Omnia runtime with the guest
 just run-runtime
-# or: cargo run -p aria-runtime -- run target/wasm32-wasip2/debug/aria_secure_agent.wasm
+# or: cargo run -p secure-runtime -- run target/wasm32-wasip2/debug/secure_agent.wasm
 
 # 3) Terminal C — trigger the game (runtime HTTP defaults to port 8080; see HTTP_ADDR)
 # Knock-knock
@@ -62,7 +62,7 @@ curl -s -X POST http://127.0.0.1:8080/play \
 
 The request can take **minutes** to return: each turn calls the LLM and the arena over WASI HTTP. **`curl -s` prints nothing until the response is ready**, so it can look like nothing is happening—watch the **runtime** terminal for transcript lines (`peer <-` / `SecureAgent ->`). Omit **`-s`** if you want curl’s progress meter, or add e.g. **`--max-time 600`** so curl doesn’t give up early.
 
-**Anthropic API key on the host:** place `anthropic_api_key.txt` at the **workspace root**, or set **`ARIA_ANTHROPIC_API_KEY_FILE`** to the key file path. The runtime vault backend (`runtime/src/plugins/vault_anthropic_local.rs`) serves secret id `anthropic_api_key` from locker `aria-anthropic`, matching the guest.
+**Anthropic API key on the host:** place `anthropic_api_key.txt` at the **workspace root**, or set **`SECURE_ANTHROPIC_API_KEY_FILE`** to the key file path. The runtime vault backend (`runtime/src/plugins/vault_anthropic_local.rs`) serves secret id `anthropic_api_key` from locker `secure-anthropic`, matching the guest.
 
 ## Arena stub
 
@@ -97,7 +97,7 @@ cargo test --workspace
 
 **Pre-commit** (full order is in [`.cursor/rules/workflow.mdc`](.cursor/rules/workflow.mdc)): (1) review this README, (2) confirm dependency direction, (3) run the automated checks above.
 
-`aria-core` only:
+`secure-core` only:
 
 ```sh
 just test-core

@@ -9,10 +9,10 @@ use arena_stub::{process_turn, PeerState, ARENA_STUB_LISTEN_PORT};
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
 
-/// Display name for the arena-stub process (mirrors `aria-core` `Agent::print`: `"{name} -> {reply}"`).
+/// Display name for the arena-stub process (mirrors `secure-core` `Agent::print`: `"{name} -> {reply}"`).
 const STUB_AGENT_NAME: &str = "agent";
 
-/// Label for incoming teller lines (mirrors `aria-core` `Agent::receive_message` print: `peer <- {message}`).
+/// Label for incoming teller lines (mirrors `secure-core` `Agent::receive_message` print: `peer <- {message}`).
 const PEER_LABEL: &str = "peer";
 
 #[derive(Clone)]

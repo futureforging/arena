@@ -1,20 +1,20 @@
 //! Game loop for the WASI guest without `wit_bindgen::block_on` inside Omnia’s async HTTP handler.
 //!
-//! [`aria_core::game_loop::play_game`] is synchronous and calls [`aria_core::llm::Llm::complete`] /
+//! [`secure_core::game_loop::play_game`] is synchronous and calls [`secure_core::llm::Llm::complete`] /
 //! [`crate::wasi_arena::WasiArena::send`], which use `block_on` for async WASI I/O. Invoking that from
 //! `async fn play_handler` deadlocks: the handler never completes the nested outbound HTTP work.
 //!
 //! Axum’s `Handler` trait requires a `Send` future. An `async fn` that took `game: &dyn Game` produced a
 //! non-`Send` future on wasm32; this module uses the concrete [`KnockKnockGame`] only.
 
-use aria_core::agent::Agent;
-use aria_core::arena::ArenaError;
-use aria_core::game::Game;
-use aria_core::llm::{ChatMessage, Llm};
-use aria_core::session::{
+use secure_core::agent::Agent;
+use secure_core::arena::ArenaError;
+use secure_core::game::Game;
+use secure_core::llm::{ChatMessage, Llm};
+use secure_core::session::{
     merge_system_prompts, ReceiveMessageError, Session, StartSessionError, ASSISTANT_ROLE, USER_ROLE,
 };
-use aria_core::games::{KnockKnockGame, PsiGame};
+use secure_core::games::{KnockKnockGame, PsiGame};
 
 use crate::wasi_arena::WasiArena;
 use crate::wasi_environment::WasiEnvironment;

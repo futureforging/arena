@@ -1,4 +1,4 @@
-# aria-poc-2 Just recipes — Cargo workspace
+# arena — Just recipes — Cargo workspace
 
 default:
     @just --list
@@ -21,12 +21,12 @@ test:
 ## Build runtime (native)
 
 build-host:
-    cargo build -p aria-runtime
+    cargo build -p secure-runtime
 
 ## Build secure-agent (wasm32-wasip2)
 
 build-guest:
-    cargo build -p aria-secure-agent --target wasm32-wasip2
+    cargo build -p secure-agent --target wasm32-wasip2
 
 ## Build everything
 
@@ -48,12 +48,12 @@ run-arena:
 ## Run the runtime with the secure-agent guest (HTTP on 0.0.0.0:8080 unless HTTP_ADDR is set; curl POST /play)
 
 run-runtime: build-guest
-    NO_PROXY=127.0.0.1,localhost,::1 cargo run -p aria-runtime -- run target/wasm32-wasip2/debug/aria_secure_agent.wasm
+    NO_PROXY=127.0.0.1,localhost,::1 cargo run -p secure-runtime -- run target/wasm32-wasip2/debug/secure_agent.wasm
 
 ## Run core tests only
 
 test-core:
-    cargo test -p aria-core
+    cargo test -p secure-core
 
 ## Run arena-stub tests only
 

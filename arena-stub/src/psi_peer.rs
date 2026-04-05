@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 /// Hardcoded peer letter set for the PSI stub (intersection is computed against this set).
 pub const PSI_PEER_SET: &[char] = &['a', 'c', 'e', 'g', 'i', 'k', 'm', 'o', 'q', 's'];
 
-/// Reply when the peer accepts the SHA-256 strategy (must stay in sync with `play_wasi` in `aria-secure-agent`).
+/// Reply when the peer accepts the SHA-256 strategy (must stay in sync with `play_wasi` in `secure-agent`).
 pub const PSI_PEER_AGREED_MESSAGE: &str = "Agreed. Send your hashes.";
 
 pub fn psi_peer_reply(step: u8, _agent_message: &str) -> String {
@@ -64,7 +64,7 @@ pub fn extract_json_string_array(text: &str) -> Option<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use aria_core::games::sha256_hex;
+    use secure_core::games::sha256_hex;
 
     use super::{extract_json_string_array, psi_peer_reply, PSI_PEER_SET};
 
