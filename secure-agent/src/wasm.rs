@@ -14,7 +14,7 @@ use tracing::Level;
 use wasip3::exports::http::handler::Guest;
 use wasip3::http::types::{ErrorCode, Request, Response as WasiResponse};
 
-use play_wasi::play_knock_knock_wasi;
+use play_wasi::{play_knock_knock_wasi, play_psi_wasi};
 use wasi_arena::WasiArena;
 use wasi_environment::WasiEnvironment;
 use wasi_llm::WasiLlm;
@@ -32,8 +32,8 @@ impl Guest for Http {
 
 /// Handles POST /play — plays a game to completion.
 ///
-/// Request body: `{"game": "knock-knock", "arena_url": "http://127.0.0.1:3000"}`
-/// Response body: `{"turns": 5, "status": "complete"}`
+/// Request body: `{"arena_url": "http://127.0.0.1:3000", "game": "knock-knock"}` or `"game": "psi"` (both fields required).
+/// Response body: `{"turns": 5, "status": "complete", "game": "knock-knock"}` (fields may vary by game).
 ///
 /// Note: no `#[omnia_wasi_otel::instrument]` on this handler — that wrapper breaks Axum’s `Handler`
 /// impl for wasm.
@@ -49,6 +49,9 @@ async fn play_handler_inner(body: Bytes) -> anyhow::Result<Json<Value>> {
     let arena_url = input["arena_url"]
         .as_str()
         .context("missing 'arena_url' field")?;
+    let game_name = input["game"]
+        .as_str()
+        .context("missing 'game' field (use \"knock-knock\" or \"psi\")")?;
 
     let llm = WasiLlm::new().await.context("initializing LLM")?;
     let environment = WasiEnvironment;
@@ -61,12 +64,16 @@ async fn play_handler_inner(body: Bytes) -> anyhow::Result<Json<Value>> {
 
     let arena = WasiArena::new(arena_url);
 
-    let turns = play_knock_knock_wasi(agent, arena)
-        .await
-        .map_err(|e| anyhow::anyhow!("game failed: {e:?}"))?;
+    let turns = match game_name {
+        "knock-knock" => play_knock_knock_wasi(agent, arena).await,
+        "psi" => play_psi_wasi(agent, arena).await,
+        other => anyhow::bail!("unknown game: {other}"),
+    }
+    .map_err(|e| anyhow::anyhow!("game failed: {e:?}"))?;
 
     Ok(Json(serde_json::json!({
         "turns": turns,
         "status": "complete",
+        "game": game_name,
     })))
 }

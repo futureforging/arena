@@ -1,5 +1,6 @@
 use aria_core::arena::{Arena, ArenaError};
 use bytes::Bytes;
+use http::StatusCode;
 use http_body_util::Full;
 use serde_json::json;
 
@@ -24,6 +25,31 @@ impl Arena for WasiArena {
 }
 
 impl WasiArena {
+    /// `POST /reset` — clears stub peer state before a new game (idempotent).
+    pub async fn reset_async(&self) -> Result<(), ArenaError> {
+        let url = format!("{}/reset", self.base_url);
+        let request = http::Request::builder()
+            .method(http::Method::POST)
+            .uri(&url)
+            .body(Full::new(Bytes::new()))
+            .map_err(|e| ArenaError::Other(e.to_string()))?;
+
+        let response = omnia_wasi_http::handle(request)
+            .await
+            .map_err(|e| ArenaError::Other(format!("arena HTTP reset failed: {e}")))?;
+        let status = response.status();
+        let _body = response
+            .into_body();
+
+        if status == StatusCode::NO_CONTENT || status == StatusCode::OK {
+            Ok(())
+        } else {
+            Err(ArenaError::Other(format!(
+                "arena reset unexpected status: {status}"
+            )))
+        }
+    }
+
     /// Outbound arena `POST /message` (use from async guest code; avoid [`Arena::send`]'s `block_on` there).
     pub async fn send_async(&self, message: &str) -> Result<String, ArenaError> {
         let url = format!("{}/message", self.base_url);

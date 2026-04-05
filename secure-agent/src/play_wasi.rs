@@ -14,13 +14,16 @@ use aria_core::llm::{ChatMessage, Llm};
 use aria_core::session::{
     merge_system_prompts, ReceiveMessageError, Session, StartSessionError, ASSISTANT_ROLE, USER_ROLE,
 };
-use aria_core::games::KnockKnockGame;
+use aria_core::games::{KnockKnockGame, PsiGame};
 
 use crate::wasi_arena::WasiArena;
 use crate::wasi_environment::WasiEnvironment;
 use crate::wasi_llm::WasiLlm;
 
 const PEER_INCOMING_PRINT_LABEL: &str = "peer";
+
+/// Must match `PSI_PEER_AGREED_MESSAGE` in `arena-stub` (`psi_peer.rs`).
+const PSI_PEER_AGREED_MESSAGE: &str = "Agreed. Send your hashes.";
 
 /// One peer line: append transcript, print, LLM async completion, print agent line. Inlined so the
 /// outer `play_knock_knock_wasi` future stays `Send` for Axum (no nested `async fn` with `&mut Agent`).
@@ -62,6 +65,11 @@ pub async fn play_knock_knock_wasi(
     mut agent: Agent<WasiEnvironment, WasiLlm>,
     arena: WasiArena,
 ) -> Result<usize, PlayGameWasiError> {
+    arena
+        .reset_async()
+        .await
+        .map_err(PlayGameWasiError::Arena)?;
+
     let game = KnockKnockGame;
     let challenge = game.challenge();
 
@@ -94,6 +102,75 @@ pub async fn play_knock_knock_wasi(
 
     let _ = agent.stop_session();
     Ok(turn)
+}
+
+/// PSI game — uses a concrete [`PsiGame`] so the future is [`Send`] for Axum.
+pub async fn play_psi_wasi(
+    mut agent: Agent<WasiEnvironment, WasiLlm>,
+    arena: WasiArena,
+) -> Result<usize, PlayGameWasiError> {
+    arena
+        .reset_async()
+        .await
+        .map_err(PlayGameWasiError::Arena)?;
+
+    let private_set = generate_random_set();
+    let game = PsiGame::new(private_set);
+    let challenge = game.challenge();
+
+    let system_prompt = match challenge.private_context {
+        Some(ref ctx) => format!("{}\n\n{ctx}", challenge.system_prompt),
+        None => challenge.system_prompt,
+    };
+
+    agent
+        .start_session(Session::new(system_prompt), ASSISTANT_ROLE, USER_ROLE)
+        .map_err(PlayGameWasiError::SessionStart)?;
+
+    let mut agent_reply = receive_one_turn!(agent, &challenge.opening_message);
+
+    let mut turn = 0;
+    let mut printed_private_set_after_agreement = false;
+    loop {
+        let peer_reply = arena
+            .send_async(&agent_reply)
+            .await
+            .map_err(PlayGameWasiError::Arena)?;
+
+        turn += 1;
+
+        if game.is_complete(turn, &peer_reply) {
+            break;
+        }
+
+        if !printed_private_set_after_agreement && peer_reply.trim() == PSI_PEER_AGREED_MESSAGE {
+            printed_private_set_after_agreement = true;
+            agent.print(&format!(
+                "[PRIVATE — local only, not sent to peer] {} private letter set: {:?}",
+                agent.name,
+                game.private_set()
+            ));
+        }
+
+        agent_reply = receive_one_turn!(agent, &peer_reply);
+    }
+
+    let _ = agent.stop_session();
+    Ok(turn)
+}
+
+/// Generate 10 unique random lowercase letters.
+fn generate_random_set() -> Vec<char> {
+    let mut letters: Vec<char> = ('a'..='z').collect();
+    let mut entropy = [0u8; 32];
+    getrandom::getrandom(&mut entropy).expect("getrandom failed");
+    for (k, i) in (1..letters.len()).rev().enumerate() {
+        let j = (entropy[k] as usize) % (i + 1);
+        letters.swap(i, j);
+    }
+    letters.truncate(10);
+    letters.sort();
+    letters
 }
 
 #[derive(Debug)]
