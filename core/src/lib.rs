@@ -9,6 +9,7 @@ pub mod games;
 pub mod llm;
 pub mod runtime;
 pub mod session;
+pub mod tool;
 pub mod transport;
 
 pub mod test_support;

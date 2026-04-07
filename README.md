@@ -8,12 +8,13 @@ The workspace uses a **hexagonal** (ports-and-adapters) shape: **`secure-core`**
 
 | Directory | Crate | Role |
 | --- | --- | --- |
-| `core/` | `secure-core` | Shared domain types, trait ports (`Arena`, `Llm`, `Environment`, `Game`), `play_game`, `KnockKnockGame`, `PsiGame` (SHA-256 hash intersection), and tests. |
+| `core/` | `secure-core` | Shared domain types, trait ports (`Arena`, `Llm`, `Environment`, `Game`), `Tool` / `ToolRegistry`, `play_game`, `KnockKnockGame`, `PsiGame` (SHA-256 hash intersection), and tests. |
+| `tools/` | `verity-tools` | Named tool implementations (`SecretsTool`, `HttpClientTool`, `ArenaClientTool`) built on `secure-core`’s `Tool` trait; depends on `secure-core` only. Not yet wired into the guest. |
 | `secure-agent/` | `secure-agent` | **WASI guest** (`wasm32-wasip2` cdylib): constrained agent that handles `POST /play`, uses WASI vault for the Anthropic API key and WASI HTTP for the arena and Anthropic APIs. |
 | `runtime/` | `secure-runtime` | **Omnia host** binary: loads the guest `.wasm`, links vault + HTTP + OpenTelemetry + **in-memory `wasi:keyvalue`** (`KeyValueDefault`; required because the guest’s HTTP stack imports keyvalue). |
 | `arena-stub/` | `arena-stub` | Local HTTP **arena** peer: scripted knock-knock audience or PSI peer via `POST /message` (game inferred from the agent’s first line after reset). |
 
-**Dependency direction:** `secure-core` has no dependency on other members. `secure-agent` and `arena-stub` depend on `secure-core`. `secure-runtime` does **not** depend on `secure-core` or `secure-agent` (it loads the guest wasm from disk).
+**Dependency direction:** `secure-core` has no dependency on other members. `verity-tools`, `secure-agent`, and `arena-stub` depend on `secure-core` only. `secure-runtime` does **not** depend on `secure-core`, `secure-agent`, or `verity-tools` (it loads the guest wasm from disk).
 
 The guest uses Axum’s `IntoResponse` for HTTP handlers instead of `omnia_sdk::HttpResult`: `omnia-sdk` 0.30.0 does not currently compile on this toolchain, while the WASI/Omnia crates used for vault and HTTP do.
 
