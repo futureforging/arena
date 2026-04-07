@@ -1,4 +1,4 @@
-use secure_core::arena::{Arena, ArenaError};
+use verity_core::arena::{Arena, ArenaError};
 use bytes::Bytes;
 use http::StatusCode;
 use http_body_util::Full;

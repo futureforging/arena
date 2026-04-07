@@ -7,7 +7,6 @@ pub mod game;
 pub mod game_loop;
 pub mod games;
 pub mod llm;
-pub mod runtime;
 pub mod session;
 pub mod tool;
 pub mod transport;

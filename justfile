@@ -21,7 +21,7 @@ test:
 ## Build runtime (native)
 
 build-host:
-    cargo build -p secure-runtime
+    cargo build -p verity-runtime
 
 ## Build secure-agent (wasm32-wasip2)
 
@@ -48,12 +48,12 @@ run-arena:
 ## Run the runtime with the secure-agent guest (HTTP on 0.0.0.0:8080 unless HTTP_ADDR is set; curl POST /play)
 
 run-runtime: build-guest
-    NO_PROXY=127.0.0.1,localhost,::1 cargo run -p secure-runtime -- run target/wasm32-wasip2/debug/secure_agent.wasm
+    NO_PROXY=127.0.0.1,localhost,::1 cargo run -p verity-runtime -- run target/wasm32-wasip2/debug/secure_agent.wasm
 
 ## Run core tests only
 
 test-core:
-    cargo test -p secure-core
+    cargo test -p verity-core
 
 ## Run arena-stub tests only
 

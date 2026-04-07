@@ -1,4 +1,4 @@
-use secure_core::environment::{Environment, LoggingLevel};
+use verity_core::environment::{Environment, LoggingLevel};
 
 pub struct WasiEnvironment;
 

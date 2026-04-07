@@ -1,7 +1,7 @@
 //! Outbound HTTP POST with JSON body.
 
-use secure_core::tool::{Tool, ToolDescriptor, ToolError};
 use serde_json::{json, Value};
+use verity_core::tool::{Tool, ToolDescriptor, ToolError};
 
 const HTTP_CLIENT_NAME: &str = "http_client";
 const HTTP_CLIENT_DESCRIPTION: &str =

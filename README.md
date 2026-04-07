@@ -4,17 +4,23 @@ This repository is a **Cargo workspace** for [Scaling Trust Arena](https://arena
 
 ## Architecture
 
-The workspace uses a **hexagonal** (ports-and-adapters) shape: **`secure-core`** is the **inner hexagon**—domain types and **ports** only (`Arena`, `Llm`, `Environment`, `Game`, etc.), with no Omnia or WASI dependencies. **`secure-agent`** is the **application**: it implements the secure agent and games against those ports and is built as the WASM guest. **`secure-runtime`** is **infrastructure** on the host: it loads the guest `.wasm` and wires Omnia/WASI **adapters** (vault, HTTP, keyvalue, telemetry); it intentionally does **not** depend on `secure-core` or `secure-agent`. **`arena-stub`** is a **simulation** of a real arena peer—a scripted local HTTP process for development—rather than the production [Scaling Trust Arena](https://arena.nicolaos.org/) service. The **`arena-stub`** crate is only this local simulator; the **`Arena`** port and the JSON field **`arena_url`** refer to whichever peer you point at (stub or production), not the crate name.
+The workspace uses a **hexagonal** (ports-and-adapters) shape: **`verity-core`** is the **inner hexagon**—domain types and **ports** only (`Arena`, `Llm`, `Environment`, `Game`, `Tool`, `ToolRegistry`, etc.), with no Omnia or WASI dependencies. **`verity-tools`** holds pluggable tool implementations (`SecretsTool`, `HttpClientTool`, `ArenaClientTool`) built on **`verity-core`**’s `Tool` trait. **`secure-agent`** is the **application**: it assembles a tool registry and is built as the WASM guest. **`verity-runtime`** is **infrastructure** on the host: it loads the guest `.wasm` and wires Omnia/WASI **adapters** (vault, HTTP, keyvalue, telemetry); it intentionally does **not** depend on `verity-core`, `verity-tools`, or `secure-agent`. **`arena-stub`** is a **simulation** of a real arena peer—a scripted local HTTP process for development—rather than the production [Scaling Trust Arena](https://arena.nicolaos.org/) service. The **`arena-stub`** crate is only this local simulator; the **`Arena`** port and the JSON field **`arena_url`** refer to whichever peer you point at (stub or production), not the crate name.
 
 | Directory | Crate | Role |
 | --- | --- | --- |
-| `core/` | `secure-core` | Shared domain types, trait ports (`Arena`, `Llm`, `Environment`, `Game`), `Tool` / `ToolRegistry`, `play_game`, `KnockKnockGame`, `PsiGame` (SHA-256 hash intersection), and tests. |
-| `tools/` | `verity-tools` | Named tool implementations (`SecretsTool`, `HttpClientTool`, `ArenaClientTool`) built on `secure-core`’s `Tool` trait; depends on `secure-core` only. Not yet wired into the guest. |
-| `secure-agent/` | `secure-agent` | **WASI guest** (`wasm32-wasip2` cdylib): constrained agent that handles `POST /play`, uses WASI vault for the Anthropic API key and WASI HTTP for the arena and Anthropic APIs. |
-| `runtime/` | `secure-runtime` | **Omnia host** binary: loads the guest `.wasm`, links vault + HTTP + OpenTelemetry + **in-memory `wasi:keyvalue`** (`KeyValueDefault`; required because the guest’s HTTP stack imports keyvalue). |
-| `arena-stub/` | `arena-stub` | Local HTTP **arena** peer: scripted knock-knock audience or PSI peer via `POST /message` (game inferred from the agent’s first line after reset). |
+| `core/` | `verity-core` | Shared domain types, trait ports (`Tool`, `ToolRegistry`, `Llm`, `Environment`, `Game`), game logic, and tests. |
+| `tools/` | `verity-tools` | Pluggable tool implementations (`SecretsTool`, `HttpClientTool`, `ArenaClientTool`). Each tool is a named, auditable capability exposed through the `Tool` trait defined in `verity-core`. |
+| `secure-agent/` | `secure-agent` | **WASI guest** (`wasm32-wasip2` cdylib): example agent that assembles a tool registry and plays arena games inside the sandbox. |
+| `runtime/` | `verity-runtime` | **Omnia host** binary: loads the guest `.wasm`, links vault + HTTP + OpenTelemetry + **in-memory `wasi:keyvalue`** (`KeyValueDefault`; required because the guest’s HTTP stack imports keyvalue). |
+| `arena-stub/` | `arena-stub` | Local HTTP **arena** peer: scripted knock-knock audience or PSI peer for development. |
 
-**Dependency direction:** `secure-core` has no dependency on other members. `verity-tools`, `secure-agent`, and `arena-stub` depend on `secure-core` only. `secure-runtime` does **not** depend on `secure-core`, `secure-agent`, or `verity-tools` (it loads the guest wasm from disk).
+**Dependency direction:** `verity-core` has no dependency on other members. `verity-tools` depends on `verity-core`. `secure-agent` depends on `verity-core` and `verity-tools`. `arena-stub` depends on `verity-core`. `verity-runtime` does **not** depend on `verity-core`, `verity-tools`, or `secure-agent`.
+
+### Tool model
+
+The agent receives a [`ToolRegistry`](core/src/tool.rs) at construction containing the tools it is allowed to use. Each tool has a name, description, and `execute` method taking structured JSON input and returning structured JSON output. The registry is populated at construction and treated as fixed afterward. Synchronous game logic (`play_game` in `verity-core`) dispatches the `"arena"` tool through this registry; the WASI guest also registers an arena client tool so the capability set is explicit and auditable, while async game loops continue to call `WasiArena::send_async` directly to avoid deadlocks.
+
+The former **`Runtime`** trait in `verity-core` (a fixed menu of `get_secret`, `post_json`, `create_transport`) has been removed in favor of the tool registry. The **concept** of the secure runtime—WASI sandboxing, capability scoping, the enforcement boundary—is unchanged; the `verity-runtime` host binary and adapters are the same.
 
 The guest uses Axum’s `IntoResponse` for HTTP handlers instead of `omnia_sdk::HttpResult`: `omnia-sdk` 0.30.0 does not currently compile on this toolchain, while the WASI/Omnia crates used for vault and HTTP do.
 
@@ -47,7 +53,7 @@ just run-arena
 
 # 2) Terminal B — Omnia runtime with the guest
 just run-runtime
-# or: cargo run -p secure-runtime -- run target/wasm32-wasip2/debug/secure_agent.wasm
+# or: cargo run -p verity-runtime -- run target/wasm32-wasip2/debug/secure_agent.wasm
 
 # 3) Terminal C — trigger the game (runtime HTTP defaults to port 8080; see HTTP_ADDR)
 # Knock-knock
@@ -98,7 +104,7 @@ cargo test --workspace
 
 **Pre-commit** (full order is in [`.cursor/rules/workflow.mdc`](.cursor/rules/workflow.mdc)): (1) review this README, (2) confirm dependency direction, (3) run the automated checks above.
 
-`secure-core` only:
+`verity-core` only:
 
 ```sh
 just test-core

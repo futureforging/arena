@@ -1,4 +1,4 @@
-use secure_core::llm::{ChatMessage, Llm, LlmCompletion};
+use verity_core::llm::{ChatMessage, Llm, LlmCompletion};
 use bytes::Bytes;
 use http_body_util::Full;
 use serde_json::{json, Map, Value};

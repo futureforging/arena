@@ -8,7 +8,7 @@ name = "arena-stub"
 path = "src/main.rs"
 
 [dependencies]
-secure-core = { path = "../core" }
+verity-core = { path = "../core" }
 axum = { version = "0.8", features = ["json"] }
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }

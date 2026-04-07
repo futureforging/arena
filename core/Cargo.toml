@@ -1,5 +1,5 @@
 [package]
-name = "secure-core"
+name = "verity-core"
 version = "0.1.0"
 edition = "2021"
 

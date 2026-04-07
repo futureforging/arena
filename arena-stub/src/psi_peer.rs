@@ -64,7 +64,7 @@ pub fn extract_json_string_array(text: &str) -> Option<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use secure_core::games::sha256_hex;
+    use verity_core::games::sha256_hex;
 
     use super::{extract_json_string_array, psi_peer_reply, PSI_PEER_SET};
 

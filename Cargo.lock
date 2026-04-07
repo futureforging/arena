@@ -109,11 +109,11 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "hex",
- "secure-core",
  "serde",
  "serde_json",
  "sha2",
  "tokio",
+ "verity-core",
 ]
 
 [[package]]
@@ -2705,37 +2705,12 @@ dependencies = [
  "omnia-wasi-otel",
  "omnia-wasi-otel-attr",
  "omnia-wasi-vault",
- "secure-core",
  "serde_json",
  "tracing",
+ "verity-core",
+ "verity-tools",
  "wasip3",
  "wit-bindgen 0.53.1",
-]
-
-[[package]]
-name = "secure-core"
-version = "0.1.0"
-dependencies = [
- "hex",
- "serde_json",
- "sha2",
- "tempfile",
-]
-
-[[package]]
-name = "secure-runtime"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cfg-if",
- "futures",
- "omnia",
- "omnia-wasi-http",
- "omnia-wasi-keyvalue",
- "omnia-wasi-otel",
- "omnia-wasi-vault",
- "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -3401,11 +3376,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
+name = "verity-core"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "verity-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cfg-if",
+ "futures",
+ "omnia",
+ "omnia-wasi-http",
+ "omnia-wasi-keyvalue",
+ "omnia-wasi-otel",
+ "omnia-wasi-vault",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "verity-tools"
 version = "0.1.0"
 dependencies = [
- "secure-core",
  "serde_json",
+ "verity-core",
 ]
 
 [[package]]

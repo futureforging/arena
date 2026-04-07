@@ -1,7 +1,7 @@
 //! Retrieve named secrets from the runtime vault.
 
-use secure_core::tool::{Tool, ToolDescriptor, ToolError};
 use serde_json::{json, Value};
+use verity_core::tool::{Tool, ToolDescriptor, ToolError};
 
 const SECRETS_NAME: &str = "secrets";
 const SECRETS_DESCRIPTION: &str = "Retrieve a named secret from the runtime vault";

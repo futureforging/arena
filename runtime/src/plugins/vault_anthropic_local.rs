@@ -12,7 +12,7 @@ use omnia_wasi_vault::{FutureResult, Locker, WasiVaultCtx};
 /// Locker id expected by this vault backend (must match the secure-agent guest).
 pub const ANTHROPIC_VAULT_LOCKER_ID: &str = "secure-anthropic";
 
-/// Secret id for the Anthropic API key (must match `anthropic_api_key` in `secure-core` and the guest).
+/// Secret id for the Anthropic API key (must match `anthropic_api_key` in the guest vault usage).
 pub const ANTHROPIC_VAULT_SECRET_ID: &str = "anthropic_api_key";
 
 /// Default filename for the Anthropic API key at the workspace root (parent of `runtime/`).

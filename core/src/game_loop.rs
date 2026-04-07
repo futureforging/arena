@@ -1,10 +1,11 @@
 use crate::{
     agent::Agent,
-    arena::{Arena, ArenaError},
+    arena::ArenaError,
     environment::Environment,
     game::Game,
     llm::Llm,
     session::{ReceiveMessageError, Session, StartSessionError, ASSISTANT_ROLE, USER_ROLE},
+    tool::ToolError,
 };
 
 /// Error from [`play_game`].
@@ -18,16 +19,17 @@ pub enum PlayGameError {
     Arena(ArenaError),
 }
 
-/// Plays a [`Game`] to completion using the given agent and arena.
+/// Plays a [`Game`] to completion using the given agent.
+///
+/// Arena messages are sent via the agent's [`crate::agent::Agent::tools`] registry under the name `"arena"`.
 ///
 /// 1. Configures the agent with the game's challenge (system prompt + private context).
 /// 2. Sends the opening message to the agent to get the first reply.
-/// 3. Loops: sends agent's reply to the arena, gets peer's response,
+/// 3. Loops: sends agent's reply through the arena tool, gets peer's response,
 ///    feeds it back to the agent, until the game says it's complete.
 /// 4. Stops the session and returns the number of completed turns.
 pub fn play_game<E: Environment, L: Llm>(
     agent: &mut Agent<E, L>,
-    arena: &dyn Arena,
     game: &dyn Game,
 ) -> Result<usize, PlayGameError> {
     let challenge = game.challenge();
@@ -47,9 +49,25 @@ pub fn play_game<E: Environment, L: Llm>(
 
     let mut turn = 0;
     loop {
-        let peer_reply = arena
-            .send(&agent_reply)
-            .map_err(PlayGameError::Arena)?;
+        let input = serde_json::json!({ "message": agent_reply });
+        let result = agent
+            .tools
+            .execute("arena", &input)
+            .map_err(|e| {
+                PlayGameError::Arena(match e {
+                    ToolError::InvalidInput(s) => ArenaError::Other(s),
+                    ToolError::ExecutionFailed(s) => ArenaError::Other(s),
+                    ToolError::NotFound(s) => ArenaError::Other(s),
+                })
+            })?;
+        let peer_reply = result["reply"]
+            .as_str()
+            .ok_or_else(|| {
+                PlayGameError::Arena(ArenaError::Other(
+                    "arena tool returned no 'reply' field".to_string(),
+                ))
+            })?
+            .to_string();
 
         turn += 1;
 
@@ -70,9 +88,15 @@ pub fn play_game<E: Environment, L: Llm>(
 mod tests {
     use super::{play_game, PlayGameError};
     use crate::{
+        agent::Agent,
         arena::ArenaError,
+        environment::LoggingLevel,
         session::{Session, StartSessionError, ASSISTANT_ROLE, USER_ROLE},
-        test_support::{agent_with_stub, StubArena, StubGame},
+        test_support::{
+            agent_with_stub, FailingArenaTool, InMemoryEnvironment, StubArenaTool, StubGame,
+            StubLlm,
+        },
+        tool::ToolRegistry,
     };
 
     #[test]
@@ -81,52 +105,61 @@ mod tests {
         agent
             .start_session(Session::new("x"), ASSISTANT_ROLE, USER_ROLE)
             .unwrap();
-        let arena = StubArena::new(Vec::new());
         let game = StubGame {
             max_turns: 5,
         };
-        let err = play_game(&mut agent, &arena, &game).unwrap_err();
+        let err = play_game(&mut agent, &game).unwrap_err();
         assert_eq!(err, PlayGameError::SessionStart(StartSessionError::AlreadyActive));
     }
 
     #[test]
     fn play_game_completes_when_arena_returns_empty_after_scripted_replies() {
-        let mut agent = agent_with_stub();
-        let arena = StubArena::new(vec![String::from("r1"), String::from("r2")]);
+        let arena_tool = StubArenaTool::new(vec![String::from("r1"), String::from("r2")]);
+        let mut agent = Agent {
+            name: String::from("a"),
+            environment: InMemoryEnvironment::new(LoggingLevel::Standard),
+            llm: StubLlm::default(),
+            tools: ToolRegistry::new(vec![Box::new(arena_tool)]),
+            active_session: None,
+        };
         let game = StubGame {
             max_turns: 100,
         };
-        let turns = play_game(&mut agent, &arena, &game).unwrap();
+        let turns = play_game(&mut agent, &game).unwrap();
         assert_eq!(turns, 3);
     }
 
     #[test]
     fn play_game_stops_when_turn_reaches_max_even_if_peer_reply_non_empty() {
-        let mut agent = agent_with_stub();
-        let arena = StubArena::new(vec![String::from("a"), String::from("b"), String::from("c")]);
+        let arena_tool =
+            StubArenaTool::new(vec![String::from("a"), String::from("b"), String::from("c")]);
+        let mut agent = Agent {
+            name: String::from("a"),
+            environment: InMemoryEnvironment::new(LoggingLevel::Standard),
+            llm: StubLlm::default(),
+            tools: ToolRegistry::new(vec![Box::new(arena_tool)]),
+            active_session: None,
+        };
         let game = StubGame {
             max_turns: 2,
         };
-        let turns = play_game(&mut agent, &arena, &game).unwrap();
+        let turns = play_game(&mut agent, &game).unwrap();
         assert_eq!(turns, 2);
     }
 
     #[test]
     fn play_game_propagates_arena_error() {
-        let mut agent = agent_with_stub();
-        let arena = FailingArena;
+        let mut agent = Agent {
+            name: String::from("a"),
+            environment: InMemoryEnvironment::new(LoggingLevel::Standard),
+            llm: StubLlm::default(),
+            tools: ToolRegistry::new(vec![Box::new(FailingArenaTool)]),
+            active_session: None,
+        };
         let game = StubGame {
             max_turns: 5,
         };
-        let err = play_game(&mut agent, &arena, &game).unwrap_err();
+        let err = play_game(&mut agent, &game).unwrap_err();
         assert_eq!(err, PlayGameError::Arena(ArenaError::Other(String::from("boom"))));
-    }
-
-    struct FailingArena;
-
-    impl crate::arena::Arena for FailingArena {
-        fn send(&self, _message: &str) -> Result<String, ArenaError> {
-            Err(ArenaError::Other(String::from("boom")))
-        }
     }
 }

@@ -7,7 +7,8 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-secure-core = { path = "../core" }
+verity-core = { path = "../core" }
+verity-tools = { path = "../tools" }
 anyhow = "1"
 serde_json = "1"
 tracing = "0.1"

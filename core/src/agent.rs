@@ -4,6 +4,7 @@ use crate::{
     session::{
         merge_system_prompts, ActiveSession, ReceiveMessageError, Session, StartSessionError,
     },
+    tool::ToolRegistry,
 };
 
 /// Label for [`Agent::receive_message`] printed incoming lines (`"{label} <- {message}"`).
@@ -17,6 +18,8 @@ pub struct Agent<E: Environment, L: Llm> {
     pub environment: E,
     /// Language model used for message exchange.
     pub llm: L,
+    /// Tools this agent is permitted to use (frozen after construction).
+    pub tools: ToolRegistry,
     /// Conversation in progress, if any.
     pub active_session: Option<ActiveSession>,
 }
@@ -137,6 +140,7 @@ mod tests {
         test_support::{
             agent_with_stub, InMemoryEnvironment, StubLlm, STUB_LLM_REPLY, STUB_REQUEST_JSON,
         },
+        tool::ToolRegistry,
     };
 
     type ExpectedLoggedLines = &'static [&'static str];
@@ -273,6 +277,7 @@ mod tests {
             name: String::from("a"),
             environment: InMemoryEnvironment::new(LoggingLevel::Standard),
             llm: StubLlm::default(),
+            tools: ToolRegistry::new(vec![]),
             active_session: None,
         };
         agent
@@ -296,6 +301,7 @@ mod tests {
             name: String::from("a"),
             environment: InMemoryEnvironment::new(LoggingLevel::Standard),
             llm: StubLlm::with_base_prompt("adapter-base"),
+            tools: ToolRegistry::new(vec![]),
             active_session: None,
         };
         agent
@@ -319,6 +325,7 @@ mod tests {
                 name: String::from("a"),
                 environment: InMemoryEnvironment::new(level),
                 llm: StubLlm::with_request_json(STUB_REQUEST_JSON),
+                tools: ToolRegistry::new(vec![]),
                 active_session: None,
             };
             agent

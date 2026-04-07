@@ -15,6 +15,9 @@ use wasip3::exports::http::handler::Guest;
 use wasip3::http::types::{ErrorCode, Request, Response as WasiResponse};
 
 use play_wasi::{play_knock_knock_wasi, play_psi_wasi};
+use verity_core::arena::Arena;
+use verity_core::tool::ToolRegistry;
+use verity_tools::arena_client::ArenaClientTool;
 use wasi_arena::WasiArena;
 use wasi_environment::WasiEnvironment;
 use wasi_llm::WasiLlm;
@@ -55,10 +58,23 @@ async fn play_handler_inner(body: Bytes) -> anyhow::Result<Json<Value>> {
 
     let llm = WasiLlm::new().await.context("initializing LLM")?;
     let environment = WasiEnvironment;
-    let agent = secure_core::agent::Agent {
+
+    let arena_tool = ArenaClientTool::new({
+        let arena_ref = WasiArena::new(arena_url);
+        move |msg| arena_ref.send(msg).map_err(|e| e.to_string())
+    });
+
+    let registry = ToolRegistry::new(vec![
+        Box::new(arena_tool),
+        // SecretsTool and HttpClientTool can be added here when
+        // the game loop needs them; for now arena is sufficient
+    ]);
+
+    let agent = verity_core::agent::Agent {
         name: String::from("SecureAgent"),
         environment,
         llm,
+        tools: registry,
         active_session: None,
     };
 

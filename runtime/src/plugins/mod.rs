@@ -1,4 +1,4 @@
-//! Host-side WASI capability backends for [`secure-runtime`](crate).
+//! Host-side WASI capability backends for [`verity-runtime`](crate).
 
 mod vault_anthropic_local;
 

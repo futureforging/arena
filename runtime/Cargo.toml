@@ -1,10 +1,10 @@
 [package]
-name = "secure-runtime"
+name = "verity-runtime"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "secure-runtime"
+name = "verity-runtime"
 path = "src/main.rs"
 
 [dependencies]

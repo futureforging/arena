@@ -1,7 +1,7 @@
 //! Send messages to an arena peer and receive replies.
 
-use secure_core::tool::{Tool, ToolDescriptor, ToolError};
 use serde_json::{json, Value};
+use verity_core::tool::{Tool, ToolDescriptor, ToolError};
 
 const ARENA_NAME: &str = "arena";
 const ARENA_DESCRIPTION: &str = "Send a message to the arena peer and receive a reply";

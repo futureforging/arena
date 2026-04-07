@@ -1,8 +1,8 @@
-//! Shared test doubles and fixtures for `secure-core` and downstream crates.
+//! Shared test doubles and fixtures for `verity-core` and downstream crates.
 //!
 //! Agent / [`Environment`] / [`Llm`] fakes, transport stubs, plus temp-file helpers for runtime adapter tests.
 
-use std::{cell::RefCell, io::Write};
+use std::{cell::RefCell, io::Write, sync::Mutex};
 
 use tempfile::NamedTempFile;
 
@@ -12,6 +12,7 @@ use crate::{
     environment::{Environment, LoggingLevel},
     game::{Challenge, Game},
     llm::{ChatMessage, Llm, LlmCompletion},
+    tool::{Tool, ToolDescriptor, ToolError, ToolRegistry},
     transport::{PostJsonTransport, TransportError},
 };
 
@@ -154,6 +155,7 @@ pub fn agent_with_stub() -> Agent<InMemoryEnvironment, StubLlm> {
         name: String::from("a"),
         environment: InMemoryEnvironment::new(LoggingLevel::Standard),
         llm: StubLlm::default(),
+        tools: ToolRegistry::new(vec![]),
         active_session: None,
     }
 }
@@ -231,6 +233,60 @@ impl PostJsonTransport for StubPostJsonTransport {
 // ---------------------------------------------------------------------------
 // Arena / Game doubles (game loop tests)
 // ---------------------------------------------------------------------------
+
+/// Stub arena tool for game loop tests. Returns replies from a list
+/// in order, then returns empty strings.
+pub struct StubArenaTool {
+    replies: Mutex<Vec<String>>,
+}
+
+impl StubArenaTool {
+    pub fn new(replies: Vec<String>) -> Self {
+        Self {
+            replies: Mutex::new(replies),
+        }
+    }
+}
+
+impl Tool for StubArenaTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            name: "arena",
+            description: "stub arena tool for tests",
+            input_schema: serde_json::json!({}),
+        }
+    }
+
+    fn execute(&self, _input: &serde_json::Value) -> Result<serde_json::Value, ToolError> {
+        let mut replies = self
+            .replies
+            .lock()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        let reply = if replies.is_empty() {
+            String::new()
+        } else {
+            replies.remove(0)
+        };
+        Ok(serde_json::json!({ "reply": reply }))
+    }
+}
+
+/// Stub arena tool that always fails.
+pub struct FailingArenaTool;
+
+impl Tool for FailingArenaTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            name: "arena",
+            description: "failing arena tool for tests",
+            input_schema: serde_json::json!({}),
+        }
+    }
+
+    fn execute(&self, _input: &serde_json::Value) -> Result<serde_json::Value, ToolError> {
+        Err(ToolError::ExecutionFailed(String::from("boom")))
+    }
+}
 
 /// Configurable [`Arena`] for tests. Returns replies from a list in order,
 /// then returns empty strings.
