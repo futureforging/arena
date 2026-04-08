@@ -15,7 +15,6 @@ use wasip3::exports::http::handler::Guest;
 use wasip3::http::types::{ErrorCode, Request, Response as WasiResponse};
 
 use play_wasi::{play_knock_knock_wasi, play_psi_wasi};
-use verity_core::arena::Arena;
 use verity_core::tool::ToolRegistry;
 use verity_tools::arena_client::ArenaClientTool;
 use wasi_arena::WasiArena;
@@ -61,7 +60,7 @@ async fn play_handler_inner(body: Bytes) -> anyhow::Result<Json<Value>> {
 
     let arena_tool = ArenaClientTool::new({
         let arena_ref = WasiArena::new(arena_url);
-        move |msg| arena_ref.send(msg).map_err(|e| e.to_string())
+        move |msg| arena_ref.send_sync(msg).map_err(|e| e.to_string())
     });
 
     let registry = ToolRegistry::new(vec![

@@ -1,6 +1,6 @@
 //! Shared test doubles and fixtures for `verity-core` and downstream crates.
 //!
-//! Agent / [`Environment`] / [`Llm`] fakes, transport stubs, plus temp-file helpers for runtime adapter tests.
+//! Agent / [`Environment`] / [`Llm`] fakes, plus temp-file helpers for runtime adapter tests.
 
 use std::{cell::RefCell, io::Write, sync::Mutex};
 
@@ -8,12 +8,10 @@ use tempfile::NamedTempFile;
 
 use crate::{
     agent::Agent,
-    arena::{Arena, ArenaError},
     environment::{Environment, LoggingLevel},
     game::{Challenge, Game},
     llm::{ChatMessage, Llm, LlmCompletion},
     tool::{Tool, ToolDescriptor, ToolError, ToolRegistry},
-    transport::{PostJsonTransport, TransportError},
 };
 
 // ---------------------------------------------------------------------------
@@ -186,51 +184,6 @@ impl Llm for EmptyReplyLlm {
 }
 
 // ---------------------------------------------------------------------------
-// Transport doubles
-// ---------------------------------------------------------------------------
-
-/// Configurable [`PostJsonTransport`] for tests. Returns `response_bytes` on every call,
-/// or `Err(TransportError::Other(...))` if `error` is set.
-pub struct StubPostJsonTransport {
-    response_bytes: Vec<u8>,
-    error: Option<String>,
-}
-
-impl StubPostJsonTransport {
-    /// Creates a transport that always returns the given bytes.
-    pub fn with_response(response_bytes: Vec<u8>) -> Self {
-        Self {
-            response_bytes,
-            error: None,
-        }
-    }
-
-    /// Creates a transport that always returns the given error.
-    pub fn with_error(msg: impl Into<String>) -> Self {
-        Self {
-            response_bytes: Vec::new(),
-            error: Some(msg.into()),
-        }
-    }
-}
-
-impl PostJsonTransport for StubPostJsonTransport {
-    fn post_json(
-        &self,
-        _url: &str,
-        _headers: &[(&str, &str)],
-        _body: &serde_json::Value,
-    ) -> Result<Vec<u8>, TransportError> {
-        if let Some(ref err) = self.error {
-            return Err(TransportError::Other(err.clone()));
-        }
-        Ok(self
-            .response_bytes
-            .clone())
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Arena / Game doubles (game loop tests)
 // ---------------------------------------------------------------------------
 
@@ -285,33 +238,6 @@ impl Tool for FailingArenaTool {
 
     fn execute(&self, _input: &serde_json::Value) -> Result<serde_json::Value, ToolError> {
         Err(ToolError::ExecutionFailed(String::from("boom")))
-    }
-}
-
-/// Configurable [`Arena`] for tests. Returns replies from a list in order,
-/// then returns empty strings.
-pub struct StubArena {
-    replies: RefCell<Vec<String>>,
-}
-
-impl StubArena {
-    pub fn new(replies: Vec<String>) -> Self {
-        Self {
-            replies: RefCell::new(replies),
-        }
-    }
-}
-
-impl Arena for StubArena {
-    fn send(&self, _message: &str) -> Result<String, ArenaError> {
-        let mut replies = self
-            .replies
-            .borrow_mut();
-        if replies.is_empty() {
-            Ok(String::new())
-        } else {
-            Ok(replies.remove(0))
-        }
     }
 }
 

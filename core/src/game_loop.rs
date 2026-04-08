@@ -1,6 +1,5 @@
 use crate::{
     agent::Agent,
-    arena::ArenaError,
     environment::Environment,
     game::Game,
     llm::Llm,
@@ -15,8 +14,8 @@ pub enum PlayGameError {
     SessionStart(StartSessionError),
     /// The agent failed to process a message.
     AgentReceive(ReceiveMessageError),
-    /// The arena failed to deliver or return a message.
-    Arena(ArenaError),
+    /// The `"arena"` tool failed or returned an unusable response.
+    Tool(ToolError),
 }
 
 /// Plays a [`Game`] to completion using the given agent.
@@ -53,17 +52,11 @@ pub fn play_game<E: Environment, L: Llm>(
         let result = agent
             .tools
             .execute("arena", &input)
-            .map_err(|e| {
-                PlayGameError::Arena(match e {
-                    ToolError::InvalidInput(s) => ArenaError::Other(s),
-                    ToolError::ExecutionFailed(s) => ArenaError::Other(s),
-                    ToolError::NotFound(s) => ArenaError::Other(s),
-                })
-            })?;
+            .map_err(PlayGameError::Tool)?;
         let peer_reply = result["reply"]
             .as_str()
             .ok_or_else(|| {
-                PlayGameError::Arena(ArenaError::Other(
+                PlayGameError::Tool(ToolError::ExecutionFailed(
                     "arena tool returned no 'reply' field".to_string(),
                 ))
             })?
@@ -89,14 +82,13 @@ mod tests {
     use super::{play_game, PlayGameError};
     use crate::{
         agent::Agent,
-        arena::ArenaError,
         environment::LoggingLevel,
         session::{Session, StartSessionError, ASSISTANT_ROLE, USER_ROLE},
         test_support::{
             agent_with_stub, FailingArenaTool, InMemoryEnvironment, StubArenaTool, StubGame,
             StubLlm,
         },
-        tool::ToolRegistry,
+        tool::{ToolError, ToolRegistry},
     };
 
     #[test]
@@ -160,6 +152,6 @@ mod tests {
             max_turns: 5,
         };
         let err = play_game(&mut agent, &game).unwrap_err();
-        assert_eq!(err, PlayGameError::Arena(ArenaError::Other(String::from("boom"))));
+        assert_eq!(err, PlayGameError::Tool(ToolError::ExecutionFailed(String::from("boom"))));
     }
 }
