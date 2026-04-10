@@ -14,7 +14,7 @@ use tracing::Level;
 use wasip3::exports::http::handler::Guest;
 use wasip3::http::types::{ErrorCode, Request, Response as WasiResponse};
 
-use play_wasi::{play_knock_knock_wasi, play_psi_wasi};
+use play_wasi::play_psi_wasi;
 use verity_core::tool::ToolRegistry;
 use verity_tools::arena_client::ArenaClientTool;
 use wasi_arena::WasiArena;
@@ -34,8 +34,10 @@ impl Guest for Http {
 
 /// Handles POST /play — plays a game to completion.
 ///
-/// Request body: `{"arena_url": "http://127.0.0.1:3000", "game": "knock-knock"}` or `"game": "psi"` (both fields required).
-/// Response body: `{"turns": 5, "status": "complete", "game": "knock-knock"}` (fields may vary by game).
+/// Request body: `{"arena_url": "...", "game": "psi"}` (both required).
+/// Optional: `"invite": "inv_..."` — when present, joins with this invite (production Arena);
+/// when absent, creates a new challenge and self-joins (local stub / dev).
+/// Response body: `{"turns": 5, "status": "complete", "game": "psi"}` (fields may vary by game).
 ///
 /// Note: no `#[omnia_wasi_otel::instrument]` on this handler — that wrapper breaks Axum’s `Handler`
 /// impl for wasm.
@@ -53,14 +55,21 @@ async fn play_handler_inner(body: Bytes) -> anyhow::Result<Json<Value>> {
         .context("missing 'arena_url' field")?;
     let game_name = input["game"]
         .as_str()
-        .context("missing 'game' field (use \"knock-knock\" or \"psi\")")?;
+        .context("missing 'game' field (use \"psi\")")?;
+    let invite: Option<&str> = input["invite"].as_str();
 
     let llm = WasiLlm::new().await.context("initializing LLM")?;
     let environment = WasiEnvironment;
 
-    let arena_tool = ArenaClientTool::new({
-        let arena_ref = WasiArena::new(arena_url);
-        move |msg| arena_ref.send_sync(msg).map_err(|e| e.to_string())
+    let arena = match invite {
+        Some(inv) => WasiArena::with_invite(arena_url, inv),
+        None => WasiArena::new(arena_url),
+    };
+    let arena_for_tool = arena.clone();
+    let arena_tool = ArenaClientTool::new(move |msg| {
+        arena_for_tool
+            .send_sync(msg)
+            .map_err(|e| e.to_string())
     });
 
     let registry = ToolRegistry::new(vec![
@@ -77,10 +86,7 @@ async fn play_handler_inner(body: Bytes) -> anyhow::Result<Json<Value>> {
         active_session: None,
     };
 
-    let arena = WasiArena::new(arena_url);
-
     let turns = match game_name {
-        "knock-knock" => play_knock_knock_wasi(agent, arena).await,
         "psi" => play_psi_wasi(agent, arena).await,
         other => anyhow::bail!("unknown game: {other}"),
     }

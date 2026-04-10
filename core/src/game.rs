@@ -1,7 +1,6 @@
 /// Configuration for an arena challenge — everything the agent needs to play.
 pub struct Challenge {
-    /// System prompt that configures the agent for this game
-    /// (e.g. "You are the joke teller in a knock-knock exchange").
+    /// System prompt that configures the agent for this game.
     pub system_prompt: String,
 
     /// Optional private data the agent receives at the start
@@ -10,7 +9,7 @@ pub struct Challenge {
     pub private_context: Option<String>,
 
     /// The first message the agent receives to kick off the exchange
-    /// (e.g. "Hello." for knock-knock). In the real arena this would
+    /// (e.g. a short greeting from the peer). In the real arena this would
     /// come from the operator or the peer; here the game provides it
     /// so the agent can initiate.
     pub opening_message: String,

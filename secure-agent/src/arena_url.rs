@@ -3,7 +3,7 @@
 /// Prepares the arena base URL for outbound WASI HTTP.
 ///
 /// - Adds `http://` when missing (relative URLs break `wasi:http` outbound).
-/// - Strips a trailing `/` so `{base}/message` is a single slash path.
+/// - Strips a trailing `/` so `{base}/api/v1/...` paths join without a double slash.
 /// - Rewrites the host `localhost` (any ASCII case) to **`127.0.0.1`**. `arena-stub` binds IPv4
 ///   only; resolving `localhost` can yield **`::1`**, so requests never reach port 3000.
 pub fn normalize_arena_base_url(raw: &str) -> String {

@@ -5,7 +5,7 @@
 //! `async fn play_handler` deadlocks: the handler never completes the nested outbound HTTP work.
 //!
 //! Axum’s `Handler` trait requires a `Send` future. An `async fn` that took `game: &dyn Game` produced a
-//! non-`Send` future on wasm32; this module uses the concrete [`KnockKnockGame`] only.
+//! non-`Send` future on wasm32; this module uses the concrete [`PsiGame`] only.
 
 use verity_core::agent::Agent;
 use verity_core::game::Game;
@@ -13,7 +13,7 @@ use verity_core::llm::{ChatMessage, Llm};
 use verity_core::session::{
     merge_system_prompts, ReceiveMessageError, Session, StartSessionError, ASSISTANT_ROLE, USER_ROLE,
 };
-use verity_core::games::{KnockKnockGame, PsiGame};
+use verity_core::games::PsiGame;
 
 use crate::wasi_arena::{WasiArena, WasiArenaError};
 use crate::wasi_environment::WasiEnvironment;
@@ -25,7 +25,7 @@ const PEER_INCOMING_PRINT_LABEL: &str = "peer";
 const PSI_PEER_AGREED_MESSAGE: &str = "Agreed. Send your hashes.";
 
 /// One peer line: append transcript, print, LLM async completion, print agent line. Inlined so the
-/// outer `play_knock_knock_wasi` future stays `Send` for Axum (no nested `async fn` with `&mut Agent`).
+/// outer `play_psi_wasi` future stays `Send` for Axum (no nested `async fn` with `&mut Agent`).
 macro_rules! receive_one_turn {
     ($agent:ident, $message:expr) => {{
         let mut active = $agent
@@ -57,50 +57,6 @@ macro_rules! receive_one_turn {
         $agent.print(&format!("{} -> {}", $agent.name, reply));
         reply
     }};
-}
-
-/// Knock-knock game only — uses a concrete [`KnockKnockGame`] (no `&dyn Game`) so the future is [`Send`].
-pub async fn play_knock_knock_wasi(
-    mut agent: Agent<WasiEnvironment, WasiLlm>,
-    arena: WasiArena,
-) -> Result<usize, PlayGameWasiError> {
-    arena
-        .reset_async()
-        .await
-        .map_err(PlayGameWasiError::Arena)?;
-
-    let game = KnockKnockGame;
-    let challenge = game.challenge();
-
-    let system_prompt = match challenge.private_context {
-        Some(ref ctx) => format!("{}\n\n{ctx}", challenge.system_prompt),
-        None => challenge.system_prompt,
-    };
-
-    agent
-        .start_session(Session::new(system_prompt), ASSISTANT_ROLE, USER_ROLE)
-        .map_err(PlayGameWasiError::SessionStart)?;
-
-    let mut agent_reply = receive_one_turn!(agent, &challenge.opening_message);
-
-    let mut turn = 0;
-    loop {
-        let peer_reply = arena
-            .send_async(&agent_reply)
-            .await
-            .map_err(PlayGameWasiError::Arena)?;
-
-        turn += 1;
-
-        if game.is_complete(turn, &peer_reply) {
-            break;
-        }
-
-        agent_reply = receive_one_turn!(agent, &peer_reply);
-    }
-
-    let _ = agent.stop_session();
-    Ok(turn)
 }
 
 /// PSI game — uses a concrete [`PsiGame`] so the future is [`Send`] for Axum.
