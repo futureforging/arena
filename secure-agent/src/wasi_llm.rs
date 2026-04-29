@@ -7,7 +7,8 @@ const VAULT_LOCKER_ID: &str = "secure-anthropic";
 const VAULT_SECRET_ID: &str = "anthropic_api_key";
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
-const DEFAULT_MODEL: &str = "claude-sonnet-4-6";
+/// Default Claude model identifier (matches outbound Anthropic payload and Arena user profile registration).
+pub const DEFAULT_MODEL: &str = "claude-sonnet-4-6";
 const MAX_TOKENS: u32 = 4096;
 
 pub struct WasiLlm {

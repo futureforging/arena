@@ -4,8 +4,8 @@
 ///
 /// - Adds `http://` when missing (relative URLs break `wasi:http` outbound).
 /// - Strips a trailing `/` so `{base}/api/v1/...` paths join without a double slash.
-/// - Rewrites the host `localhost` (any ASCII case) to **`127.0.0.1`**. `arena-stub` binds IPv4
-///   only; resolving `localhost` can yield **`::1`**, so requests never reach port 3000.
+/// - Rewrites the host `localhost` (any ASCII case) to **`127.0.0.1`**. Some local servers bind
+///   IPv4 only; resolving `localhost` can yield **`::1`**, missing the listener.
 pub fn normalize_arena_base_url(raw: &str) -> String {
     let trimmed = raw
         .trim()
