@@ -1,7 +1,6 @@
 mod arena_transport;
 mod play_wasi;
 mod production_arena;
-mod stub_arena;
 mod wasi_environment;
 mod wasi_llm;
 
@@ -19,7 +18,6 @@ use wasip3::http::types::{ErrorCode, Request, Response as WasiResponse};
 use arena_transport::ArenaTransport;
 use play_wasi::play_psi_wasi;
 use production_arena::ProductionArena;
-use stub_arena::StubArena;
 use verity_core::agent::Agent;
 use verity_core::games::Role;
 use verity_core::tool::ToolRegistry;
@@ -38,13 +36,11 @@ impl Guest for Http {
     }
 }
 
-/// Handles POST /play — plays a game to completion.
+/// Handles POST /play — plays a game to completion against the production Arena.
 ///
-/// Request body: `{"arena_url": "...", "game": "psi"}` (both required).
-/// Optional: `"invite": "inv_..."` — when present, uses signed production join + bearer session;
-/// when absent, creates a challenge and self-joins against `arena_url` (local stub / dev).
-/// Optional: `"signer_url"` — signer base URL (default `http://127.0.0.1:8090`; used when `invite` is present).
-/// Optional (production only): `"role"` (`"first"` / `"second"`, default `"second"`), `"username"` (default `"missionary"`).
+/// Request body: `{"arena_url": "...", "game": "psi", "invite": "inv_..."}` — `invite` is required.
+/// Optional: `"signer_url"` — signer base URL (default `http://127.0.0.1:8090`).
+/// Optional: `"role"` (`"first"` / `"second"`, default `"second"`), `"username"` (default `"missionary"`).
 /// Response body: `{"turns": 5, "status": "complete", "game": "psi"}` (fields may vary by game).
 ///
 /// Note: no `#[omnia_wasi_otel::instrument]` on this handler — that wrapper breaks Axum’s `Handler`
@@ -88,43 +84,26 @@ async fn play_handler_inner(body: Bytes) -> anyhow::Result<Json<Value>> {
         anyhow::bail!("only 'psi' is supported in this build (got {game_name:?})");
     }
 
-    let arena_url = input["arena_url"]
-        .as_str()
-        .context("missing 'arena_url' field")?;
-    let invite = input["invite"].as_str();
+    let arena_url = input["arena_url"].as_str().context("missing 'arena_url' field")?;
+    let invite = input["invite"].as_str().context(
+        "missing 'invite' field — this build plays only against the production Arena; obtain an invite from POST /api/v1/challenges/psi",
+    )?;
     let signer_url = input["signer_url"]
         .as_str()
         .unwrap_or("http://127.0.0.1:8090");
-    let role_str = input["role"].as_str();
-    let username_opt = input["username"].as_str();
 
-    if invite.is_none() && (role_str.is_some() || username_opt.is_some()) {
-        anyhow::bail!(
-            "role and username are only valid in production mode (provide an 'invite')"
-        );
-    }
-
-    let role = match role_str {
+    let role = match input["role"].as_str() {
         None | Some("second") => Role::Second,
         Some("first") => Role::First,
         Some(other) => anyhow::bail!("invalid role {other:?}; must be \"first\" or \"second\""),
     };
+    let username = input["username"].as_str().unwrap_or("missionary");
 
-    let username = username_opt.unwrap_or("missionary");
-
-    let turns = match invite {
-        None => {
-            let arena = StubArena::new(arena_url);
-            let agent = build_psi_guest_agent(arena.clone()).await?;
-            play_psi_wasi(agent, arena, role).await
-        }
-        Some(inv) => {
-            let arena = ProductionArena::new(arena_url, inv, signer_url, username);
-            let agent = build_psi_guest_agent(arena.clone()).await?;
-            play_psi_wasi(agent, arena, role).await
-        }
-    }
-    .map_err(|e| anyhow::anyhow!("game failed: {e:?}"))?;
+    let arena = ProductionArena::new(arena_url, invite, signer_url, username);
+    let agent = build_psi_guest_agent(arena.clone()).await?;
+    let turns = play_psi_wasi(agent, arena, role)
+        .await
+        .map_err(|e| anyhow::anyhow!("game failed: {e:?}"))?;
 
     Ok(Json(serde_json::json!({
         "turns": turns,

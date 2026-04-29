@@ -52,11 +52,6 @@ run-signer-2:
     VERITY_ARENA_SIGNING_KEY_FILE=arena_signing_key_2.hex \
     cargo run -p verity-runtime --bin verity-signer
 
-## Run the arena stub
-
-run-arena:
-    cargo run -p arena-stub
-
 ## Run the runtime with the secure-agent guest (HTTP on 0.0.0.0:8080 unless HTTP_ADDR is set; curl POST /play)
 
 run-runtime: build-guest
@@ -66,8 +61,3 @@ run-runtime: build-guest
 
 test-core:
     cargo test -p verity-core
-
-## Run arena-stub tests only
-
-test-arena:
-    cargo test -p arena-stub

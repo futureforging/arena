@@ -49,8 +49,96 @@ impl ProductionArena {
         }
     }
 
-    /// No-op — `/reset` exists only on the stub.
+    /// No-op — production Arena has no guest-visible `/reset`.
     pub async fn reset_async(&self) -> Result<(), WasiArenaError> {
+        Ok(())
+    }
+
+    /// `GET /api/v1/arena/sync?channel=<id>&index=<n>` with bearer auth.
+    /// Returns the content strings of all messages whose `from` is `"operator"`.
+    pub async fn operator_sync_async(
+        &self,
+        start_index: usize,
+    ) -> Result<Vec<String>, WasiArenaError> {
+        self.ensure_psi_session().await?;
+        let (challenge_id, session_key) = self.session_snapshot()?;
+
+        let url = format!(
+            "{}/api/v1/arena/sync?channel={}&index={}",
+            self.base_url.trim_end_matches('/'),
+            challenge_id,
+            start_index,
+        );
+        let req = ProductionArena::build_authed_request(
+            Some(session_key.as_str()),
+            http::Method::GET,
+            &url,
+            Bytes::new(),
+            true,
+        )?;
+        let resp = omnia_wasi_http::handle(req)
+            .await
+            .map_err(|e| WasiArenaError::Other(format!("arena operator sync failed: {e}")))?;
+        let status = resp.status();
+        let body = resp.into_body();
+        if !status.is_success() {
+            let text = std::string::String::from_utf8_lossy(&body).into_owned();
+            return Err(WasiArenaError::Other(format!(
+                "arena operator sync status {status}: {text}"
+            )));
+        }
+        let v: Value = serde_json::from_slice(&body)
+            .map_err(|e| WasiArenaError::Other(format!("invalid JSON from operator sync: {e}")))?;
+
+        let messages = v["messages"].as_array().ok_or_else(|| {
+            WasiArenaError::Other("operator sync missing 'messages' array".to_string())
+        })?;
+        let mut out = Vec::new();
+        for m in messages {
+            if m["from"].as_str() == Some("operator") {
+                if let Some(c) = m["content"].as_str() {
+                    out.push(c.to_string());
+                }
+            }
+        }
+        tracing::debug!("operator_sync returned {} operator messages", out.len());
+        Ok(out)
+    }
+
+    /// `POST /api/v1/arena/message` with bearer auth (no `from` field).
+    pub async fn submit_message_async(
+        &self,
+        message_type: &str,
+        content: &str,
+    ) -> Result<(), WasiArenaError> {
+        self.ensure_psi_session().await?;
+        let (challenge_id, session_key) = self.session_snapshot()?;
+
+        let url = format!("{}/api/v1/arena/message", self.base_url);
+        let body = serde_json::to_vec(&json!({
+            "challengeId": challenge_id,
+            "messageType": message_type,
+            "content": content,
+        }))
+        .map_err(|e| WasiArenaError::Other(e.to_string()))?;
+        let req = ProductionArena::build_authed_request(
+            Some(session_key.as_str()),
+            http::Method::POST,
+            &url,
+            Bytes::from(body),
+            true,
+        )?;
+        let resp = omnia_wasi_http::handle(req)
+            .await
+            .map_err(|e| WasiArenaError::Other(format!("arena message submit failed: {e}")))?;
+        let status = resp.status();
+        let resp_body = resp.into_body();
+        if !status.is_success() {
+            let text = std::string::String::from_utf8_lossy(&resp_body).into_owned();
+            return Err(WasiArenaError::Other(format!(
+                "arena message submit status {status}: {text}"
+            )));
+        }
         Ok(())
     }
 
@@ -470,6 +558,41 @@ impl ProductionArena {
         Ok(reply)
     }
 
+    /// Post one chat line with bearer auth. Does NOT poll `chat/sync` afterward.
+    /// `next_chat_index` is intentionally not advanced here — the message we just sent
+    /// will appear on a subsequent `send_async` or `receive_async`'s sync if needed.
+    pub async fn send_only_async(&self, message: &str) -> Result<(), WasiArenaError> {
+        self.ensure_psi_session().await?;
+        let (challenge_id, session_key) = self.session_snapshot()?;
+
+        let send_url = format!("{}/api/v1/chat/send", self.base_url);
+        let send_body = serde_json::to_vec(&json!({
+            "channel": challenge_id,
+            "content": message,
+        }))
+        .map_err(|e| WasiArenaError::Other(e.to_string()))?;
+
+        let send_req = ProductionArena::build_authed_request(
+            Some(session_key.as_str()),
+            http::Method::POST,
+            &send_url,
+            Bytes::from(send_body),
+            true,
+        )?;
+
+        let send_resp = omnia_wasi_http::handle(send_req)
+            .await
+            .map_err(|e| WasiArenaError::Other(format!("arena chat send failed: {e}")))?;
+        if !send_resp.status().is_success() {
+            let status = send_resp.status();
+            let body_text = std::string::String::from_utf8_lossy(&send_resp.into_body()).into_owned();
+            return Err(WasiArenaError::Other(format!(
+                "arena chat send status {status}: {body_text}"
+            )));
+        }
+        Ok(())
+    }
+
     pub async fn receive_async(&self) -> Result<String, WasiArenaError> {
         self.ensure_psi_session().await?;
 
@@ -593,10 +716,42 @@ impl ArenaTransport for ProductionArena {
         }
     }
 
+    fn send_only_async(
+        &self,
+        message: &str,
+    ) -> impl std::future::Future<Output = Result<(), WasiArenaError>> + Send {
+        let s = self.clone();
+        let m = message.to_string();
+        async move { s.send_only_async(&m).await }
+    }
+
     fn receive_async(&self) -> impl std::future::Future<Output = Result<String, WasiArenaError>> + Send {
         let s = self.clone();
         async move {
             s.receive_async().await
+        }
+    }
+
+    fn operator_sync_async(
+        &self,
+        start_index: usize,
+    ) -> impl std::future::Future<Output = Result<Vec<String>, WasiArenaError>> + Send {
+        let s = self.clone();
+        async move {
+            s.operator_sync_async(start_index).await
+        }
+    }
+
+    fn submit_message_async(
+        &self,
+        message_type: &str,
+        content: &str,
+    ) -> impl std::future::Future<Output = Result<(), WasiArenaError>> + Send {
+        let s = self.clone();
+        let mt = message_type.to_string();
+        let c = content.to_string();
+        async move {
+            s.submit_message_async(&mt, &c).await
         }
     }
 }
