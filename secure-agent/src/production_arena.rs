@@ -60,12 +60,14 @@ impl ProductionArena {
         &self,
         start_index: usize,
     ) -> Result<Vec<String>, WasiArenaError> {
-        self.ensure_psi_session().await?;
+        self.ensure_psi_session()
+            .await?;
         let (challenge_id, session_key) = self.session_snapshot()?;
 
         let url = format!(
             "{}/api/v1/arena/sync?channel={}&index={}",
-            self.base_url.trim_end_matches('/'),
+            self.base_url
+                .trim_end_matches('/'),
             challenge_id,
             start_index,
         );
@@ -90,9 +92,11 @@ impl ProductionArena {
         let v: Value = serde_json::from_slice(&body)
             .map_err(|e| WasiArenaError::Other(format!("invalid JSON from operator sync: {e}")))?;
 
-        let messages = v["messages"].as_array().ok_or_else(|| {
-            WasiArenaError::Other("operator sync missing 'messages' array".to_string())
-        })?;
+        let messages = v["messages"]
+            .as_array()
+            .ok_or_else(|| {
+                WasiArenaError::Other("operator sync missing 'messages' array".to_string())
+            })?;
         let mut out = Vec::new();
         for m in messages {
             if m["from"].as_str() == Some("operator") {
@@ -111,7 +115,8 @@ impl ProductionArena {
         message_type: &str,
         content: &str,
     ) -> Result<(), WasiArenaError> {
-        self.ensure_psi_session().await?;
+        self.ensure_psi_session()
+            .await?;
         let (challenge_id, session_key) = self.session_snapshot()?;
 
         let url = format!("{}/api/v1/arena/message", self.base_url);
@@ -280,14 +285,57 @@ impl ProductionArena {
     }
 
     async fn set_username_best_effort(&self, session_key: &str) {
+        let public_key_hex = match self.signer_get_pubkey_hex().await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("set username: signer pubkey failed: {e}");
+                return;
+            }
+        };
+        let timestamp_ms = match Self::timestamp_ms_now() {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("set username: timestamp failed: {e}");
+                return;
+            }
+        };
+
+        let model = crate::wasi_llm::DEFAULT_MODEL;
+        // TODO: canonical message format for POST /api/v1/users is undocumented and we
+        // have not been able to derive it. All of the following return 401 Invalid
+        // signature (with bearer auth + signed envelope, body containing publicKey,
+        // signature, timestamp, username, model):
+        //   arena:v1:users:update:{username}:{model}:{timestamp}
+        //   arena:v1:users:update:{username}:{timestamp}
+        //   arena:v1:users:{username}:{timestamp}
+        //   arena:v1:users:update:{timestamp}
+        //   arena:v1:user:update:{username}:{timestamp}
+        //   arena:v1:profile:update:{username}:{timestamp}
+        // userId (per the GET /api/v1/users listing) is a 64-hex-char SHA-256-shape
+        // value, almost certainly SHA-256 of the SPKI DER pubkey bytes — a userId-based
+        // canonical message is the next thing to try if/when we get the spec.
+        // Awaiting confirmation from arena-engine maintainer.
+        let message = format!("arena:v1:users:update:{}:{}", self.username, timestamp_ms);
+
+        let signature_hex = match self.signer_sign_message(&message).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("set username: signer sign failed: {e}");
+                return;
+            }
+        };
+
         let url = format!("{}/api/v1/users", self.base_url);
         let body = match serde_json::to_vec(&json!({
             "username": self.username,
-            "model": crate::wasi_llm::DEFAULT_MODEL,
+            "model": model,
+            "publicKey": public_key_hex,
+            "signature": signature_hex,
+            "timestamp": timestamp_ms,
         })) {
             Ok(b) => b,
             Err(e) => {
-                tracing::warn!("set username: serialize body failed: {e}");
+                eprintln!("set username: serialize body failed: {e}");
                 return;
             }
         };
@@ -301,7 +349,7 @@ impl ProductionArena {
         ) {
             Ok(r) => r,
             Err(e) => {
-                tracing::warn!("set username: build request failed: {e}");
+                eprintln!("set username: build request failed: {e}");
                 return;
             }
         };
@@ -311,13 +359,13 @@ impl ProductionArena {
                 let status = response.status();
                 let body_vec = response.into_body();
                 if status.is_success() {
-                    tracing::info!("set arena username to '{}'", self.username);
+                    eprintln!("set arena username to '{}'", self.username);
                 } else {
                     let text = std::string::String::from_utf8_lossy(&body_vec).into_owned();
-                    tracing::warn!("set username failed: status={status} body={text}");
+                    eprintln!("set username failed: status={status} body={text}");
                 }
             }
-            Err(e) => tracing::warn!("set username HTTP error: {e}"),
+            Err(e) => eprintln!("set username HTTP error: {e}"),
         }
     }
 
@@ -401,10 +449,15 @@ impl ProductionArena {
             .session
             .lock()
             .map_err(|_| WasiArenaError::Other("arena session mutex poisoned".to_string()))?;
-        if g.self_user_id.is_some() {
+        if g.self_user_id
+            .is_some()
+        {
             return Ok(());
         }
-        for m in messages.iter().rev() {
+        for m in messages
+            .iter()
+            .rev()
+        {
             if m["content"].as_str() == Some(sent_content) {
                 if let Some(fid) = m["from"].as_str() {
                     g.self_user_id = Some(fid.to_string());
@@ -499,9 +552,11 @@ impl ProductionArena {
                 WasiArenaError::Other(format!("invalid JSON from arena chat sync: {e}"))
             })?;
 
-            let messages = v["messages"].as_array().ok_or_else(|| {
-                WasiArenaError::Other("arena chat sync missing 'messages' array".to_string())
-            })?;
+            let messages = v["messages"]
+                .as_array()
+                .ok_or_else(|| {
+                    WasiArenaError::Other("arena chat sync missing 'messages' array".to_string())
+                })?;
 
             // Bootstrap self_user_id by matching our just-sent content (no-op after first success).
             self.maybe_set_self_user_id_from_content(messages, message)?;
@@ -520,12 +575,16 @@ impl ProductionArena {
                             .map(|i| i as usize)
                     })
                     .ok_or_else(|| {
-                        WasiArenaError::Other("arena chat message missing numeric index".to_string())
+                        WasiArenaError::Other(
+                            "arena chat message missing numeric index".to_string(),
+                        )
                     })?;
                 last_index = Some(idx);
                 if let Some(ref sid) = self_id_opt {
                     if m["from"].as_str() != Some(sid.as_str()) {
-                        peer_line = m["content"].as_str().map(std::string::ToString::to_string);
+                        peer_line = m["content"]
+                            .as_str()
+                            .map(std::string::ToString::to_string);
                     }
                 }
             }
@@ -562,7 +621,8 @@ impl ProductionArena {
     /// `next_chat_index` is intentionally not advanced here — the message we just sent
     /// will appear on a subsequent `send_async` or `receive_async`'s sync if needed.
     pub async fn send_only_async(&self, message: &str) -> Result<(), WasiArenaError> {
-        self.ensure_psi_session().await?;
+        self.ensure_psi_session()
+            .await?;
         let (challenge_id, session_key) = self.session_snapshot()?;
 
         let send_url = format!("{}/api/v1/chat/send", self.base_url);
@@ -583,9 +643,13 @@ impl ProductionArena {
         let send_resp = omnia_wasi_http::handle(send_req)
             .await
             .map_err(|e| WasiArenaError::Other(format!("arena chat send failed: {e}")))?;
-        if !send_resp.status().is_success() {
+        if !send_resp
+            .status()
+            .is_success()
+        {
             let status = send_resp.status();
-            let body_text = std::string::String::from_utf8_lossy(&send_resp.into_body()).into_owned();
+            let body_text =
+                std::string::String::from_utf8_lossy(&send_resp.into_body()).into_owned();
             return Err(WasiArenaError::Other(format!(
                 "arena chat send status {status}: {body_text}"
             )));
@@ -594,7 +658,8 @@ impl ProductionArena {
     }
 
     pub async fn receive_async(&self) -> Result<String, WasiArenaError> {
-        self.ensure_psi_session().await?;
+        self.ensure_psi_session()
+            .await?;
 
         let (challenge_id, session_key) = self.session_snapshot()?;
 
@@ -608,7 +673,8 @@ impl ProductionArena {
 
         let sync_url = format!(
             "{}/api/v1/chat/sync?channel={}&index={}",
-            self.base_url.trim_end_matches('/'),
+            self.base_url
+                .trim_end_matches('/'),
             challenge_id,
             start_index
         );
@@ -640,9 +706,11 @@ impl ProductionArena {
                 WasiArenaError::Other(format!("invalid JSON from arena chat sync: {e}"))
             })?;
 
-            let messages = v["messages"].as_array().ok_or_else(|| {
-                WasiArenaError::Other("arena chat sync missing 'messages' array".to_string())
-            })?;
+            let messages = v["messages"]
+                .as_array()
+                .ok_or_else(|| {
+                    WasiArenaError::Other("arena chat sync missing 'messages' array".to_string())
+                })?;
 
             let self_id_opt = self.self_user_id_owned()?;
 
@@ -652,9 +720,15 @@ impl ProductionArena {
                 let idx = m["index"]
                     .as_u64()
                     .map(|u| u as usize)
-                    .or_else(|| m["index"].as_i64().map(|i| i as usize))
+                    .or_else(|| {
+                        m["index"]
+                            .as_i64()
+                            .map(|i| i as usize)
+                    })
                     .ok_or_else(|| {
-                        WasiArenaError::Other("arena chat message missing numeric index".to_string())
+                        WasiArenaError::Other(
+                            "arena chat message missing numeric index".to_string(),
+                        )
                     })?;
                 last_index = Some(idx);
                 let from = m["from"].as_str();
@@ -663,7 +737,9 @@ impl ProductionArena {
                     None => true,
                 };
                 if is_peer {
-                    peer_line = m["content"].as_str().map(std::string::ToString::to_string);
+                    peer_line = m["content"]
+                        .as_str()
+                        .map(std::string::ToString::to_string);
                 }
             }
 
@@ -722,13 +798,19 @@ impl ArenaTransport for ProductionArena {
     ) -> impl std::future::Future<Output = Result<(), WasiArenaError>> + Send {
         let s = self.clone();
         let m = message.to_string();
-        async move { s.send_only_async(&m).await }
+        async move {
+            s.send_only_async(&m)
+                .await
+        }
     }
 
-    fn receive_async(&self) -> impl std::future::Future<Output = Result<String, WasiArenaError>> + Send {
+    fn receive_async(
+        &self,
+    ) -> impl std::future::Future<Output = Result<String, WasiArenaError>> + Send {
         let s = self.clone();
         async move {
-            s.receive_async().await
+            s.receive_async()
+                .await
         }
     }
 
@@ -738,7 +820,8 @@ impl ArenaTransport for ProductionArena {
     ) -> impl std::future::Future<Output = Result<Vec<String>, WasiArenaError>> + Send {
         let s = self.clone();
         async move {
-            s.operator_sync_async(start_index).await
+            s.operator_sync_async(start_index)
+                .await
         }
     }
 
@@ -751,7 +834,8 @@ impl ArenaTransport for ProductionArena {
         let mt = message_type.to_string();
         let c = content.to_string();
         async move {
-            s.submit_message_async(&mt, &c).await
+            s.submit_message_async(&mt, &c)
+                .await
         }
     }
 }
