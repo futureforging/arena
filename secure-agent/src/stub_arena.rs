@@ -294,4 +294,13 @@ impl ArenaTransport for StubArena {
         let msg = message.to_string();
         async move { s.send_async(&msg).await }
     }
+
+    fn receive_async(&self) -> impl std::future::Future<Output = Result<String, WasiArenaError>> + Send {
+        async move {
+            Err(WasiArenaError::Other(
+                "self-play (receive_async) is not supported on StubArena; \
+                 use the production arena with two signed identities".to_string(),
+            ))
+        }
+    }
 }

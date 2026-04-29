@@ -27,6 +27,12 @@ pub trait ArenaTransport: Clone + Send + Sync + 'static {
         message: &str,
     ) -> impl Future<Output = Result<String, WasiArenaError>> + Send;
 
+    /// Receive a single peer message without sending. Used by second-mover self-play.
+    /// Implementations must poll until a peer message arrives or fail with a clear
+    /// timeout error. Implementations that don't support self-play (e.g. the local
+    /// stub) return an error.
+    fn receive_async(&self) -> impl Future<Output = Result<String, WasiArenaError>> + Send;
+
     /// Synchronous wrapper for tool callbacks (uses `block_on` for async WASI I/O).
     fn send_sync(&self, message: &str) -> Result<String, WasiArenaError> {
         wit_bindgen::block_on(ArenaTransport::send_async(self, message))

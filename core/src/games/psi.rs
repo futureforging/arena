@@ -7,7 +7,7 @@ const MAX_TURNS: usize = 15;
 const BASE_SYSTEM_PROMPT: &str =
     "You are playing Private Set Intersection with your peer. Be concise at every step.";
 
-const PSI_SESSION_PROMPT: &str = r#"You are playing a Private Set Intersection (PSI) game. You have a private set of letters. Your goal is to find which letters you and your peer have in common WITHOUT revealing letters that are not in the intersection.
+const PSI_SECOND_MOVER_SESSION_PROMPT: &str = r#"You are playing a Private Set Intersection (PSI) game. You have a private set of letters. Your goal is to find which letters you and your peer have in common WITHOUT revealing letters that are not in the intersection.
 
 Turn order:
 1) The peer opens with a brief greeting (e.g. "Hello."). Ask if they would like to play Private Set Intersection (one short sentence ending with a question mark).
@@ -18,7 +18,28 @@ Turn order:
 
 IMPORTANT: When sending hashes in step 3, send ONLY the JSON array on a single line. No preamble, no explanation. Use the exact hex hashes provided in your private data."#;
 
+const PSI_FIRST_MOVER_SESSION_PROMPT: &str = r#"You are playing a Private Set Intersection (PSI) game. You have a private set of letters. Your goal is to find which letters you and your peer have in common WITHOUT revealing letters that are not in the intersection.
+
+You opened the conversation with "Hello." and your peer is now responding. Turn order from here:
+1) The peer will ask if you want to play Private Set Intersection. Reply with a single word: "yes".
+2) The peer will propose using SHA-256 hash intersection (e.g. "I propose we use SHA-256 Hash Intersection..."). Reply with a single word: "agreed".
+3) The peer will send their hashed items as a JSON array on a single line, like: ["aef3...", "b2c4...", ...]. Compute the plaintext intersection: for each of THEIR hashes, check whether it appears in YOUR list of hashes (provided in your private data below). For every match, take the corresponding plaintext letter from YOUR private data. Reply with a single-line JSON array of those plaintext letters, like: ["a", "c", "f"]. No preamble, no explanation.
+4) The peer will reply with "Result: correct" (or "Result: incorrect") and "Goodbye." on a separate line. Reply with "Goodbye." on its own line to acknowledge and end the conversation.
+
+IMPORTANT: When sending the intersection in step 3, send ONLY the JSON array on a single line. Use exact lowercase letters from your set."#;
+
 const OPENING_MESSAGE: &str = "Hello.";
+
+/// Whether this PSI game instance plays the first-mover or second-mover script.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Role {
+    /// Sends `"Hello."` first, then drives the responsive half of the protocol
+    /// (says yes to playing, agrees to strategy, computes intersection, says goodbye).
+    First,
+    /// Waits for the peer's `"Hello."`, then drives the proposing half
+    /// (asks to play, proposes strategy, sends hashes, verifies result).
+    Second,
+}
 
 /// Compute the SHA-256 hex digest of `input`.
 pub fn sha256_hex(input: &str) -> String {
@@ -30,14 +51,20 @@ pub fn sha256_hex(input: &str) -> String {
 /// Private Set Intersection arena game using a hashed-set exchange (see session prompt).
 pub struct PsiGame {
     private_set: Vec<char>,
+    role: Role,
 }
 
 impl PsiGame {
-    /// Creates a new PSI game with the given private set of letters.
-    pub fn new(private_set: Vec<char>) -> Self {
+    /// Creates a new PSI game with the given private set of letters and mover role.
+    pub fn new(private_set: Vec<char>, role: Role) -> Self {
         Self {
             private_set,
+            role,
         }
+    }
+
+    pub fn role(&self) -> Role {
+        self.role
     }
 
     /// This game's private letters (for local logging only; never sent verbatim to the peer).
@@ -73,7 +100,11 @@ impl PsiGame {
 
 impl Game for PsiGame {
     fn challenge(&self) -> Challenge {
-        let system_prompt = format!("{BASE_SYSTEM_PROMPT}\n\n{PSI_SESSION_PROMPT}");
+        let session_prompt = match self.role {
+            Role::First => PSI_FIRST_MOVER_SESSION_PROMPT,
+            Role::Second => PSI_SECOND_MOVER_SESSION_PROMPT,
+        };
+        let system_prompt = format!("{BASE_SYSTEM_PROMPT}\n\n{session_prompt}");
         Challenge {
             system_prompt,
             private_context: Some(self.build_private_context()),
@@ -91,12 +122,12 @@ impl Game for PsiGame {
 
 #[cfg(test)]
 mod tests {
-    use super::{sha256_hex, PsiGame};
+    use super::{sha256_hex, PsiGame, Role};
     use crate::game::Game;
 
     #[test]
     fn challenge_has_private_context_with_hashes() {
-        let game = PsiGame::new(vec!['a', 'b']);
+        let game = PsiGame::new(vec!['a', 'b'], Role::Second);
         let c = game.challenge();
         assert!(c
             .private_context
@@ -109,20 +140,33 @@ mod tests {
     }
 
     #[test]
+    fn first_and_second_mover_system_prompts_differ() {
+        let first = PsiGame::new(vec!['a'], Role::First).challenge();
+        let second = PsiGame::new(vec!['a'], Role::Second).challenge();
+        assert_ne!(first.system_prompt, second.system_prompt);
+        assert!(first
+            .system_prompt
+            .contains("You opened the conversation"));
+        assert!(second
+            .system_prompt
+            .contains("The peer opens with a brief greeting"));
+    }
+
+    #[test]
     fn is_complete_on_goodbye() {
-        let game = PsiGame::new(vec!['a']);
+        let game = PsiGame::new(vec!['a'], Role::Second);
         assert!(game.is_complete(1, "Goodbye."));
     }
 
     #[test]
     fn is_complete_on_max_turns() {
-        let game = PsiGame::new(vec!['a']);
+        let game = PsiGame::new(vec!['a'], Role::Second);
         assert!(game.is_complete(15, "still here"));
     }
 
     #[test]
     fn is_complete_false_for_normal_turn() {
-        let game = PsiGame::new(vec!['a']);
+        let game = PsiGame::new(vec!['a'], Role::Second);
         assert!(!game.is_complete(1, "yes"));
     }
 

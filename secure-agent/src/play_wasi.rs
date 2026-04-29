@@ -13,7 +13,7 @@ use verity_core::llm::{ChatMessage, Llm};
 use verity_core::session::{
     merge_system_prompts, ReceiveMessageError, Session, StartSessionError, ASSISTANT_ROLE, USER_ROLE,
 };
-use verity_core::games::PsiGame;
+use verity_core::games::{PsiGame, Role};
 
 use crate::arena_transport::{ArenaTransport, WasiArenaError};
 use crate::wasi_environment::WasiEnvironment;
@@ -63,6 +63,7 @@ macro_rules! receive_one_turn {
 pub async fn play_psi_wasi<A: ArenaTransport>(
     mut agent: Agent<WasiEnvironment, WasiLlm>,
     arena: A,
+    role: Role,
 ) -> Result<usize, PlayGameWasiError> {
     arena
         .reset_async()
@@ -70,7 +71,7 @@ pub async fn play_psi_wasi<A: ArenaTransport>(
         .map_err(PlayGameWasiError::Arena)?;
 
     let private_set = generate_random_set();
-    let game = PsiGame::new(private_set);
+    let game = PsiGame::new(private_set, role);
     let challenge = game.challenge();
 
     let system_prompt = match challenge.private_context {
@@ -82,9 +83,40 @@ pub async fn play_psi_wasi<A: ArenaTransport>(
         .start_session(Session::new(system_prompt), ASSISTANT_ROLE, USER_ROLE)
         .map_err(PlayGameWasiError::SessionStart)?;
 
-    let mut agent_reply = receive_one_turn!(agent, &challenge.opening_message);
+    // Role-specific first turn:
+    //   First mover  — send a literal "Hello." to the arena (no LLM call), then
+    //                  receive the peer's response and run it through the agent.
+    //                  This counts as one completed peer exchange (turn = 1).
+    //   Second mover — receive the peer's opening line from the arena (production),
+    //                  or on StubArena fall back to the canned opening_message (stub
+    //                  does not support receive-only sync). Then run through the agent.
+    //                  No send round trip yet (turn = 0).
+    let (mut agent_reply, mut turn) = match role {
+        Role::First => {
+            agent.print(&format!("{} -> Hello.", agent.name));
+            let peer_reply = arena
+                .send_async("Hello.")
+                .await
+                .map_err(PlayGameWasiError::Arena)?;
+            let reply = receive_one_turn!(agent, &peer_reply);
+            (reply, 1usize)
+        }
+        Role::Second => {
+            let reply = match arena.receive_async().await {
+                Ok(peer_line) => receive_one_turn!(agent, &peer_line),
+                Err(e) => {
+                    let msg = e.to_string();
+                    if msg.contains("StubArena") {
+                        receive_one_turn!(agent, &challenge.opening_message)
+                    } else {
+                        return Err(PlayGameWasiError::Arena(e));
+                    }
+                }
+            };
+            (reply, 0usize)
+        }
+    };
 
-    let mut turn = 0;
     let mut printed_private_set_after_agreement = false;
     loop {
         let peer_reply = arena

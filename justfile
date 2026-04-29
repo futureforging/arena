@@ -40,9 +40,16 @@ verify: fmt lint build test
 
 precommit: verify
 
-## Run the production-arena signer service (port 8090; reads arena_signing_key.hex from workspace root)
+## Run signer 1 (port 8090, key file arena_signing_key_1.hex) — for missionary
+run-signer-1:
+    VERITY_SIGNER_ADDR=127.0.0.1:8090 \
+    VERITY_ARENA_SIGNING_KEY_FILE=arena_signing_key_1.hex \
+    cargo run -p verity-runtime --bin verity-signer
 
-run-signer:
+## Run signer 2 (port 8091, key file arena_signing_key_2.hex) — for friend
+run-signer-2:
+    VERITY_SIGNER_ADDR=127.0.0.1:8091 \
+    VERITY_ARENA_SIGNING_KEY_FILE=arena_signing_key_2.hex \
     cargo run -p verity-runtime --bin verity-signer
 
 ## Run the arena stub
