@@ -2,20 +2,31 @@
 name = "verity-runtime"
 version = "0.1.0"
 edition = "2021"
+default-run = "verity-runtime"
 
 [[bin]]
 name = "verity-runtime"
 path = "src/main.rs"
 
+[[bin]]
+name = "verity-signer"
+path = "src/bin/signer.rs"
+
 [dependencies]
 anyhow = "1"
+axum = "0.8.9"
 cfg-if = "1"
+ed25519-dalek = { version = "2.2.0", features = ["pkcs8"] }
 futures = "0.3"
+hex = "0.4.3"
 omnia = "0.30.0"
 omnia-wasi-http = "0.30.0"
 omnia-wasi-keyvalue = "0.30.0"
 omnia-wasi-otel = "0.30.0"
 omnia-wasi-vault = "0.30.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 
 [dev-dependencies]
 tempfile = "3"

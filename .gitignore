@@ -7,6 +7,9 @@ target/
 
 # API key (see README)
 anthropic_api_key.txt
+# Arena signing key
+arena_signing_key.hex
+
 .env
 
 tmp/

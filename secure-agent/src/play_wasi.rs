@@ -1,7 +1,7 @@
 //! Game loop for the WASI guest without `wit_bindgen::block_on` inside Omnia’s async HTTP handler.
 //!
 //! [`verity_core::game_loop::play_game`] is synchronous and calls [`verity_core::llm::Llm::complete`] /
-//! [`crate::wasi_arena::WasiArena::send_sync`], which use `block_on` for async WASI I/O. Invoking that from
+//! the arena adapter's `send_sync` (which uses `block_on` for async WASI I/O). Invoking that from
 //! `async fn play_handler` deadlocks: the handler never completes the nested outbound HTTP work.
 //!
 //! Axum’s `Handler` trait requires a `Send` future. An `async fn` that took `game: &dyn Game` produced a
@@ -15,7 +15,7 @@ use verity_core::session::{
 };
 use verity_core::games::PsiGame;
 
-use crate::wasi_arena::{WasiArena, WasiArenaError};
+use crate::arena_transport::{ArenaTransport, WasiArenaError};
 use crate::wasi_environment::WasiEnvironment;
 use crate::wasi_llm::WasiLlm;
 
@@ -60,9 +60,9 @@ macro_rules! receive_one_turn {
 }
 
 /// PSI game — uses a concrete [`PsiGame`] so the future is [`Send`] for Axum.
-pub async fn play_psi_wasi(
+pub async fn play_psi_wasi<A: ArenaTransport>(
     mut agent: Agent<WasiEnvironment, WasiLlm>,
-    arena: WasiArena,
+    arena: A,
 ) -> Result<usize, PlayGameWasiError> {
     arena
         .reset_async()

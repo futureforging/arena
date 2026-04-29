@@ -1,3 +1,5 @@
+//! Stub Arena transport: create challenge + self-join (`arena-stub` / local dev).
+
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
@@ -5,24 +7,8 @@ use http::StatusCode;
 use http_body_util::Full;
 use serde_json::{json, Value};
 
+use crate::arena_transport::{ArenaTransport, WasiArenaError};
 use crate::arena_url::normalize_arena_base_url;
-
-/// Failure from outbound arena HTTP or response parsing in the WASI guest.
-#[derive(Clone, Debug)]
-pub enum WasiArenaError {
-    /// Adapter-specific failure message.
-    Other(String),
-}
-
-impl std::fmt::Display for WasiArenaError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            WasiArenaError::Other(msg) => f.write_str(msg),
-        }
-    }
-}
-
-impl std::error::Error for WasiArenaError {}
 
 #[derive(Debug, Default)]
 struct SessionState {
@@ -32,53 +18,25 @@ struct SessionState {
     next_chat_index: usize,
 }
 
-/// Outbound Arena HTTP client (Scaling Trust API shapes).
-///
-/// Two modes:
-/// - **Create + join** (`new`): creates a challenge, takes the first invite, joins. For local stub / dev.
-/// - **Join only** (`with_invite`): joins with a pre-assigned invite code. For the production Arena.
+/// Outbound Arena HTTP client for the local stub (create + self-join path).
 #[derive(Clone)]
-pub struct WasiArena {
+pub struct StubArena {
     base_url: String,
-    /// Pre-assigned invite code (join-only mode). `None` means create + self-join.
-    invite: Option<String>,
     session: Arc<Mutex<SessionState>>,
 }
 
-impl WasiArena {
+impl StubArena {
     /// Create + join mode (local stub / dev). Calls `POST /api/v1/challenges/psi`
     /// then joins with the first returned invite.
     pub fn new(base_url: &str) -> Self {
         Self {
             base_url: normalize_arena_base_url(base_url),
-            invite: None,
             session: Arc::new(Mutex::new(SessionState::default())),
         }
-    }
-
-    /// Join-only mode (production Arena). Joins with the provided invite code,
-    /// skipping challenge creation.
-    pub fn with_invite(base_url: &str, invite: &str) -> Self {
-        Self {
-            base_url: normalize_arena_base_url(base_url),
-            invite: Some(invite.to_string()),
-            session: Arc::new(Mutex::new(SessionState::default())),
-        }
-    }
-
-    /// Synchronous send (wraps async via block_on). Use from sync
-    /// closures like the ArenaClientTool backing function.
-    pub fn send_sync(&self, message: &str) -> Result<String, WasiArenaError> {
-        wit_bindgen::block_on(self.send_async(message))
     }
 
     /// `POST /reset` — clears stub state before a new game (idempotent).
     pub async fn reset_async(&self) -> Result<(), WasiArenaError> {
-        // /reset is only available on the local stub; skip for production Arena.
-        if self.invite.is_some() {
-            return Ok(());
-        }
-
         {
             let mut g = self
                 .session
@@ -125,10 +83,7 @@ impl WasiArena {
             return Ok(());
         }
 
-        let (challenge_id, agent_invite) = match &self.invite {
-            None => self.create_and_join().await?,
-            Some(inv) => self.join_only(inv).await?,
-        };
+        let (challenge_id, agent_invite) = self.create_and_join().await?;
 
         let mut g = self
             .session
@@ -179,26 +134,13 @@ impl WasiArena {
             })?
             .to_string();
 
-        self.do_join(&agent_invite).await?;
+        self.do_join_stub(&agent_invite).await?;
 
         Ok((challenge_id, agent_invite))
     }
 
-    /// Joins with the provided invite via `POST /api/v1/arena/join`, parses
-    /// `ChallengeID` from the response. Returns `(challenge_id, agent_invite)`.
-    async fn join_only(&self, invite: &str) -> Result<(String, String), WasiArenaError> {
-        let join_body = self.do_join(invite).await?;
-
-        let challenge_id = join_body["ChallengeID"]
-            .as_str()
-            .ok_or_else(|| WasiArenaError::Other("join response missing 'ChallengeID'".to_string()))?
-            .to_string();
-
-        Ok((challenge_id, invite.to_string()))
-    }
-
-    /// `POST /api/v1/arena/join` with the given invite. Returns the parsed response JSON.
-    async fn do_join(&self, invite: &str) -> Result<Value, WasiArenaError> {
+    /// `POST /api/v1/arena/join` with the stub body (invite-only). Response is not required for state.
+    async fn do_join_stub(&self, invite: &str) -> Result<(), WasiArenaError> {
         let join_url = format!("{}/api/v1/arena/join", self.base_url);
         let body = json!({ "invite": invite });
         let body_bytes =
@@ -218,9 +160,7 @@ impl WasiArena {
                 join_resp.status()
             )));
         }
-        let resp_body = join_resp.into_body();
-        serde_json::from_slice(&resp_body)
-            .map_err(|e| WasiArenaError::Other(format!("invalid JSON from join: {e}")))
+        Ok(())
     }
 
     /// Returns `(challenge_id, agent_invite)` from the initialized session, or errors.
@@ -337,5 +277,21 @@ impl WasiArena {
         }
 
         Ok(reply)
+    }
+}
+
+impl ArenaTransport for StubArena {
+    fn reset_async(&self) -> impl std::future::Future<Output = Result<(), WasiArenaError>> + Send {
+        let s = self.clone();
+        async move { s.reset_async().await }
+    }
+
+    fn send_async(
+        &self,
+        message: &str,
+    ) -> impl std::future::Future<Output = Result<String, WasiArenaError>> + Send {
+        let s = self.clone();
+        let msg = message.to_string();
+        async move { s.send_async(&msg).await }
     }
 }

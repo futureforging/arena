@@ -11,14 +11,14 @@ The workspace uses a **hexagonal** (ports-and-adapters) shape: **`verity-core`**
 | `core/` | `verity-core` | Shared domain types, trait ports (`Tool`, `ToolRegistry`, `Llm`, `Environment`, `Game`), game logic, and tests. |
 | `tools/` | `verity-tools` | Pluggable tool implementations (`SecretsTool`, `HttpClientTool`, `ArenaClientTool`). Each tool is a named, auditable capability exposed through the `Tool` trait defined in `verity-core`. |
 | `secure-agent/` | `secure-agent` | **WASI guest** (`wasm32-wasip2` cdylib): example agent that assembles a tool registry and plays arena games inside the sandbox. |
-| `runtime/` | `verity-runtime` | **Omnia host** binary: loads the guest `.wasm`, links vault + HTTP + OpenTelemetry + **in-memory `wasi:keyvalue`** (`KeyValueDefault`; required because the guest’s HTTP stack imports keyvalue). |
+| `runtime/` | `verity-runtime` | **Omnia host** binary: loads the guest `.wasm`, links vault + HTTP + OpenTelemetry + **in-memory `wasi:keyvalue`** (`KeyValueDefault`; required because the guest’s HTTP stack imports keyvalue). Includes **`verity-signer`**: a standalone localhost HTTP server (Ed25519 signing for production Arena **`/play`** with **`invite`**; PKCS#8 key file at workspace root — see Production Arena section below). |
 | `arena-stub/` | `arena-stub` | Local HTTP **arena** simulator: Scaling Trust Arena–shaped routes with a scripted PSI peer for development. |
 
 **Dependency direction:** `verity-core` has no dependency on other members. `verity-tools` depends on `verity-core`. `secure-agent` depends on `verity-core` and `verity-tools`. `arena-stub` depends on `verity-core`. `verity-runtime` does **not** depend on `verity-core`, `verity-tools`, or `secure-agent`.
 
 ### Tool model
 
-The agent receives a [`ToolRegistry`](core/src/tool.rs) at construction containing the tools it is allowed to use. Each tool has a name, description, and `execute` method taking structured JSON input and returning structured JSON output. The registry is populated at construction and treated as fixed afterward. Synchronous game logic (`play_game` in `verity-core`) dispatches the `"arena"` tool through this registry; failures surface as [`PlayGameError::Tool`](core/src/game_loop.rs). The WASI guest also registers an arena client tool so the capability set is explicit and auditable, while async game loops continue to call `WasiArena::send_async` directly to avoid deadlocks.
+The agent receives a [`ToolRegistry`](core/src/tool.rs) at construction containing the tools it is allowed to use. Each tool has a name, description, and `execute` method taking structured JSON input and returning structured JSON output. The registry is populated at construction and treated as fixed afterward. Synchronous game logic (`play_game` in `verity-core`) dispatches the `"arena"` tool through this registry; failures surface as [`PlayGameError::Tool`](core/src/game_loop.rs). The WASI guest also registers an arena client tool so the capability set is explicit and auditable, while async game loops continue to call the arena adapter’s **`send_async`** directly to avoid deadlocks.
 
 The former **`Runtime`** trait in `verity-core` (a fixed menu of `get_secret`, `post_json`, `create_transport`) has been removed in favor of the tool registry. The **concept** of the secure runtime—WASI sandboxing, capability scoping, the enforcement boundary—is unchanged; the `verity-runtime` host binary and adapters are the same.
 
@@ -27,7 +27,7 @@ The guest uses Axum’s `IntoResponse` for HTTP handlers instead of `omnia_sdk::
 ### How it works
 
 1. The runtime loads the secure-agent WASM and grants vault + HTTP + keyvalue (+ otel) capabilities.
-2. A `POST /play` request to the runtime’s HTTP port triggers the guest’s handler, which runs the selected game inside the sandbox. The JSON body must include **`"arena_url"`** and **`"game"`** — use **`"psi"`** (required; there is no default). Optionally include **`"invite"`** with an Arena invite code; when absent the agent creates a new challenge at the given **`arena_url`** and self-joins (usual setup for the local stub). The Omnia stack listens on **`0.0.0.0:8080`** by default (override with env **`HTTP_ADDR`**, e.g. `127.0.0.1:8080`). Use **`http://127.0.0.1:8080/play`** in `curl`, not port 8000.
+2. A `POST /play` request to the runtime’s HTTP port triggers the guest’s handler, which runs **PSI only** (`"game": "psi"`). The JSON body must include **`"arena_url"`** and **`"game"`**. With **no** **`invite`**, the guest resets the stub where applicable, creates a challenge at **`arena_url`**, and self-joins (local stub / dev). With **`invite`**, the guest uses **signed join** against production Arena: it calls the host **`verity-signer`** service for Ed25519 bytes, then **`POST .../arena/join`** and bearer **`sessionKey`** for chat. Optional **`"signer_url"`** selects the signer (default **`http://127.0.0.1:8090`**), used when **`invite`** is present. The Omnia stack listens on **`0.0.0.0:8080`** by default (override with env **`HTTP_ADDR`**, e.g. `127.0.0.1:8080`). Use **`http://127.0.0.1:8080/play`** in `curl`, not port 8000.
 3. The agent reads the API key from WASI vault, talks to the arena and to Anthropic only through WASI HTTP.
 4. The host controls both capabilities; the guest has no direct filesystem access for secrets, no raw env-based secret injection in the guest, and no unsandboxed network.
 
@@ -53,18 +53,37 @@ just run-arena
 
 # 2) Terminal B — Omnia runtime with the guest
 just run-runtime
-# or: cargo run -p verity-runtime -- run target/wasm32-wasip2/debug/secure_agent.wasm
+# or: cargo run -p verity-runtime --bin verity-runtime -- run target/wasm32-wasip2/debug/secure_agent.wasm
 
 # 3) Terminal C — trigger the game (runtime HTTP defaults to port 8080; see HTTP_ADDR)
 # PSI against local stub (auto-create + join)
 curl -s -X POST http://127.0.0.1:8080/play \
   -H "Content-Type: application/json" \
   -d '{"game": "psi", "arena_url": "http://127.0.0.1:3000"}'
+```
 
-# PSI against production Arena (join with invite)
-# curl -s -X POST http://127.0.0.1:8080/play \
-#   -H "Content-Type: application/json" \
-#   -d '{"game": "psi", "arena_url": "https://arena-engine.nicolaos.org", "invite": "inv_..."}'
+**Production Arena (signed join).** Requires a one-time keypair setup, then three processes.
+
+First, generate the Ed25519 signing key (run once at the workspace root):
+
+```sh
+openssl genpkey -algorithm Ed25519 -outform DER | xxd -p | tr -d '\n' > arena_signing_key.hex
+```
+
+This produces a single-line lowercase hex string of PKCS#8 DER. Do not commit this file. Back it up if you want a stable agent identity across machines. **`verity-signer`** reads this file at startup and exits with an error if it is missing.
+
+```sh
+# Terminal A — signer (listens on 127.0.0.1:8090 by default)
+just run-signer
+
+# Terminal B — Omnia runtime with the secure-agent guest
+just run-runtime
+
+# Terminal C — trigger the game against live Arena (use a valid invite from the operator)
+curl -s -X POST http://127.0.0.1:8080/play \
+  -H "Content-Type: application/json" \
+  --max-time 600 \
+  -d '{"game":"psi","arena_url":"https://arena-engine.nicolaos.org","invite":"inv_..."}'
 ```
 
 The request can take **minutes** to return: each turn calls the LLM and the arena over WASI HTTP. **`curl -s` prints nothing until the response is ready**, so it can look like nothing is happening—watch the **runtime** terminal for transcript lines (`peer <-` / `SecureAgent ->`). Omit **`-s`** if you want curl’s progress meter, or add e.g. **`--max-time 600`** so curl doesn’t give up early.
@@ -85,9 +104,9 @@ The **arena-stub** binary listens on **`127.0.0.1:3000`** (see `arena-stub/src/l
 | `POST` | `/api/v1/arena/message` | Body `{"challengeId","from","messageType","content"}` — records a submission; stub appends a short operator ack for sync. |
 | `POST` | `/reset` | **`204 No Content`** — clears all stub state (dev convenience). |
 
-The secure-agent guest calls **`POST /reset`** at the start of each **`/play`** when no invite is provided, then drives **`POST .../challenges/psi`**, **`POST .../arena/join`**, **`POST .../chat/send`**, and **`GET .../chat/sync`** via `WasiArena` (see `secure-agent/src/wasi_arena.rs`). With an invite in the **`/play`** body, challenge creation and **`/reset`** are skipped; the guest joins with that invite only. Challenge text for the real agent still comes from `PsiGame` in **`verity-core`** today; operator sync on the stub carries parallel canned instructions for manual or future client use. After both sides agree on the hash strategy, the guest and the stub each print their own private letter set to the host console once, labeled as local-only, before the hash exchange.
+The secure-agent guest calls **`POST /reset`** at the start of each **`/play`** when no **`invite`** is provided, then drives **`POST .../challenges/psi`**, **`POST .../arena/join`** (stub-style invite-only body), **`POST .../chat/send`**, and **`GET .../chat/sync`** via **`StubArena`** (`secure-agent/src/stub_arena.rs`). With **`invite`** in the **`/play`** body, **`ProductionArena`** (`secure-agent/src/production_arena.rs`) skips challenge creation and **`/reset`**; it uses **`verity-signer`** for PKCS#8 Ed25519 signing, **`POST .../arena/join`** with **`publicKey`**, **`signature`**, **`timestamp`**, obtains **`ChallengeID`** and **`sessionKey`**, and bearer auth for **`chat/send`** / **`chat/sync`** (no **`from`** field). Challenge text for the real agent still comes from `PsiGame` in **`verity-core`** today; operator sync on the stub carries parallel canned instructions for manual or future client use. After both sides agree on the hash strategy, the guest and the stub each print their own private letter set to the host console once, labeled as local-only, before the hash exchange.
 
-**Production Arena:** To play against the real Scaling Trust Arena, obtain an invite code from the Arena operator or another player, then pass `"arena_url": "https://arena-engine.nicolaos.org"` and `"invite": "inv_..."` in the `POST /play` body. The agent skips challenge creation and joins directly. The `/reset` call is skipped automatically when an invite is provided.
+**Production Arena summary:** Obtain an invite code, run **`just run-signer`** (with **`arena_signing_key.hex`** at the workspace root), **`just run-runtime`**, then **`POST /play`** with **`arena_url`** and **`invite`**; optional **`signer_url`**. The guest never touches the signing key — **`verity-signer`** alone reads **`arena_signing_key.hex`**.
 
 **Manual curl flow (illustrative):**
 
