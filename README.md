@@ -18,7 +18,7 @@ The workspace uses a **hexagonal** (ports-and-adapters) shape: **`verity-core`**
 
 ### Tool model
 
-The agent receives a [`ToolRegistry`](core/src/tool.rs) at construction containing the tools it is allowed to use. Each tool has a name, description, and `execute` method taking structured JSON input and returning structured JSON output. The registry is populated at construction and treated as fixed afterward. Synchronous game logic (`play_game` in `verity-core`) dispatches the `"arena"` tool through this registry; failures surface as [`PlayGameError::Tool`](core/src/game_loop.rs). The WASI guest also registers an arena client tool so the capability set is explicit and auditable, while async game loops continue to call the arena adapter’s **`send_async`** directly to avoid deadlocks.
+The agent receives a [`ToolRegistry`](core/src/tool.rs) at construction containing the tools it is allowed to use. Each tool has a name, description, and `execute` method taking structured JSON input and returning structured JSON output. The registry is populated at construction and treated as fixed afterward. The WASI guest registers an arena client tool so the agent's outbound capability is explicit and auditable, while the async game loop ([`play_psi_wasi`](secure-agent/src/play_wasi.rs)) calls the arena adapter's **`send_async`** directly to avoid deadlocking the Omnia HTTP handler.
 
 The former **`Runtime`** trait in `verity-core` (a fixed menu of `get_secret`, `post_json`, `create_transport`) has been removed in favor of the tool registry. The **concept** of the secure runtime—WASI sandboxing, capability scoping, the enforcement boundary—is unchanged; the `verity-runtime` host binary and adapters are the same.
 

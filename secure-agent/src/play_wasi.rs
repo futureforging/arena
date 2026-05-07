@@ -1,8 +1,7 @@
-//! Game loop for the WASI guest without `wit_bindgen::block_on` inside Omnia’s async HTTP handler.
-//!
-//! [`verity_core::game_loop::play_game`] is synchronous and calls [`verity_core::llm::Llm::complete`] /
-//! [`crate::arena_sync::send_sync`] (which uses `block_on` for async WASI I/O). Invoking that from
-//! `async fn play_handler` deadlocks: the handler never completes the nested outbound HTTP work.
+//! Async game loop for the WASI guest. The whole loop must stay on the same async runtime as the
+//! Omnia HTTP handler — any `wit_bindgen::block_on` here would deadlock the handler since the
+//! nested outbound HTTP work would never complete. The only `block_on` in the workspace is the
+//! tiny [`crate::arena_sync::send_sync`] shim used by the synchronous `Tool::execute` callback.
 //!
 //! Axum’s `Handler` trait requires a `Send` future. An `async fn` that took `game: &dyn Game` produced a
 //! non-`Send` future on wasm32; this module uses the concrete [`PsiGame`] only.
