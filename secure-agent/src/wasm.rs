@@ -1,7 +1,6 @@
 mod arena_transport;
 mod play_wasi;
 mod production_arena;
-mod wasi_environment;
 mod wasi_llm;
 
 use anyhow::Context;
@@ -18,11 +17,11 @@ use wasip3::http::types::{ErrorCode, Request, Response as WasiResponse};
 use arena_transport::ArenaTransport;
 use play_wasi::play_psi_wasi;
 use production_arena::ProductionArena;
+use verity_adapters::CliEnvironment;
 use verity_core::agent::Agent;
 use verity_core::games::Role;
 use verity_core::tool::ToolRegistry;
 use verity_tools::arena_client::ArenaClientTool;
-use wasi_environment::WasiEnvironment;
 use wasi_llm::WasiLlm;
 
 struct Http;
@@ -52,9 +51,9 @@ async fn play_handler(body: Bytes) -> impl IntoResponse {
     }
 }
 
-async fn build_psi_guest_agent<A: ArenaTransport>(arena: A) -> anyhow::Result<Agent<WasiEnvironment, WasiLlm>> {
+async fn build_psi_guest_agent<A: ArenaTransport>(arena: A) -> anyhow::Result<Agent<CliEnvironment, WasiLlm>> {
     let llm = WasiLlm::new().await.context("initializing LLM")?;
-    let environment = WasiEnvironment;
+    let environment = CliEnvironment;
 
     let arena_for_tool = arena.clone();
     let arena_tool = ArenaClientTool::new(move |msg| {

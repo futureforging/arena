@@ -18,17 +18,18 @@ use verity_core::{
     },
 };
 
+use verity_adapters::CliEnvironment;
+
 use crate::{
     arena_transport::{ArenaTransport, WasiArenaError},
     extract_peer_arrays::{extract_peer_hash_array, extract_peer_number_array},
     operator_parse::parse_private_set,
-    wasi_environment::WasiEnvironment,
     wasi_llm::WasiLlm,
 };
 
 const PEER_INCOMING_PRINT_LABEL: &str = "peer";
 
-fn collect_transcript_for_extraction(agent: &Agent<WasiEnvironment, WasiLlm>) -> Vec<ChatMessage> {
+fn collect_transcript_for_extraction(agent: &Agent<CliEnvironment, WasiLlm>) -> Vec<ChatMessage> {
     agent
         .active_session
         .as_ref()
@@ -96,7 +97,7 @@ macro_rules! receive_one_turn {
 
 /// PSI game — uses a concrete [`PsiGame`] so the future is [`Send`] for Axum.
 pub async fn play_psi_wasi<A: ArenaTransport>(
-    mut agent: Agent<WasiEnvironment, WasiLlm>,
+    mut agent: Agent<CliEnvironment, WasiLlm>,
     arena: A,
     role: Role,
 ) -> Result<usize, PlayGameWasiError> {

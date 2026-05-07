@@ -4,16 +4,17 @@ This repository is a **Cargo workspace** for [Scaling Trust Arena](https://arena
 
 ## Architecture
 
-The workspace uses a **hexagonal** (ports-and-adapters) shape: **`verity-core`** is the **inner hexagon**—domain types and **ports** only (`Tool`, `ToolRegistry`, `Llm`, `Environment`, `Game`, etc.), with no Omnia or WASI dependencies. Arena traffic is modeled as the named **`"arena"`** tool in the registry, not a separate core trait. **`verity-tools`** holds pluggable tool implementations (`SecretsTool`, `HttpClientTool`, `ArenaClientTool`) built on **`verity-core`**’s `Tool` trait. **`secure-agent`** is the **application**: it assembles a tool registry and is built as the WASM guest. **`verity-runtime`** is **infrastructure** on the host: it loads the guest `.wasm` and wires Omnia/WASI **adapters** (vault, HTTP, keyvalue, telemetry); it intentionally does **not** depend on `verity-core`, `verity-tools`, or `secure-agent`.
+The workspace uses a **hexagonal** (ports-and-adapters) shape: **`verity-core`** is the **inner hexagon**—domain types and **ports** only (`Tool`, `ToolRegistry`, `Llm`, `Environment`, `Game`, etc.), with no Omnia or WASI dependencies. Arena traffic is modeled as the named **`"arena"`** tool in the registry, not a separate core trait. **`verity-tools`** holds pluggable tool implementations (`SecretsTool`, `HttpClientTool`, `ArenaClientTool`) built on **`verity-core`**’s `Tool` trait. **`verity-adapters`** holds concrete implementations of `verity-core` ports against host environments (today: `CliEnvironment` for stdio). **`secure-agent`** is the **application**: it assembles a tool registry and is built as the WASM guest. **`verity-runtime`** is **infrastructure** on the host: it loads the guest `.wasm` and wires Omnia/WASI **adapters** (vault, HTTP, keyvalue, telemetry); it intentionally does **not** depend on `verity-core`, `verity-tools`, `verity-adapters`, or `secure-agent`.
 
 | Directory | Crate | Role |
 | --- | --- | --- |
 | `core/` | `verity-core` | Shared domain types, trait ports (`Tool`, `ToolRegistry`, `Llm`, `Environment`, `Game`), game logic, and tests. |
 | `tools/` | `verity-tools` | Pluggable tool implementations (`SecretsTool`, `HttpClientTool`, `ArenaClientTool`). Each tool is a named, auditable capability exposed through the `Tool` trait defined in `verity-core`. |
+| `adapters/` | `verity-adapters` | Concrete adapters that implement `verity-core` ports against host environments (e.g. `CliEnvironment` for stdio). Depends only on `verity-core`. |
 | `secure-agent/` | `secure-agent` | **WASI guest** (`wasm32-wasip2` cdylib): example agent that assembles a tool registry and plays arena games inside the sandbox. |
 | `runtime/` | `verity-runtime` | **Omnia host** binary: loads the guest `.wasm`, links vault + HTTP + OpenTelemetry + **in-memory `wasi:keyvalue`** (`KeyValueDefault`; required because the guest’s HTTP stack imports keyvalue). Includes **`verity-signer`**: standalone localhost HTTP servers (Ed25519 signing for production Arena **`/play`** with **`invite`**; PKCS#8 key files at workspace root — see Production Arena section below). |
 
-**Dependency direction:** `verity-core` has no dependency on other members. `verity-tools` depends on `verity-core`. `secure-agent` depends on `verity-core` and `verity-tools`. `verity-runtime` does **not** depend on `verity-core`, `verity-tools`, or `secure-agent`.
+**Dependency direction:** `verity-core` has no dependency on other members. `verity-tools` depends on `verity-core`. `verity-adapters` depends on `verity-core`. `secure-agent` depends on `verity-core`, `verity-tools`, and `verity-adapters`. `verity-runtime` does **not** depend on `verity-core`, `verity-tools`, `verity-adapters`, or `secure-agent`.
 
 ### Tool model
 
