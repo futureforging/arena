@@ -1,29 +1,15 @@
 //! Shared test doubles and fixtures for `verity-core` and downstream crates.
 //!
-//! Agent / [`Environment`] / [`Llm`] fakes, plus temp-file helpers for runtime adapter tests.
+//! Agent / [`Environment`] / [`Llm`] fakes used by core's own unit tests.
 
-use std::{cell::RefCell, io::Write, sync::Mutex};
-
-use tempfile::NamedTempFile;
+use std::cell::RefCell;
 
 use crate::{
     agent::Agent,
     environment::{Environment, LoggingLevel},
-    game::{Challenge, Game},
     llm::{ChatMessage, Llm, LlmCompletion},
-    tool::{Tool, ToolDescriptor, ToolError, ToolRegistry},
+    tool::ToolRegistry,
 };
-
-// ---------------------------------------------------------------------------
-// Temp files (runtime / vault tests)
-// ---------------------------------------------------------------------------
-
-/// Creates a [`NamedTempFile`] and writes `line` with [`writeln!`], matching hand-rolled test setup.
-pub fn named_temp_file_with_writeln(line: &str) -> std::io::Result<NamedTempFile> {
-    let mut tmp = NamedTempFile::new()?;
-    writeln!(tmp, "{line}")?;
-    Ok(tmp)
-}
 
 // ---------------------------------------------------------------------------
 // Agent / environment / LLM doubles
@@ -155,107 +141,5 @@ pub fn agent_with_stub() -> Agent<InMemoryEnvironment, StubLlm> {
         llm: StubLlm::default(),
         tools: ToolRegistry::new(vec![]),
         active_session: None,
-    }
-}
-
-/// Minimal [`Environment`] for tests that only need trait satisfaction (e.g. wiring tests).
-pub struct NoopEnvironment;
-
-impl Environment for NoopEnvironment {
-    fn print(&self, _s: &str) {}
-
-    fn logging_level(&self) -> LoggingLevel {
-        LoggingLevel::None
-    }
-
-    fn emit_log(&self, _message: &str) {}
-}
-
-/// Minimal [`Llm`] with an empty reply (for factory / wiring tests).
-pub struct EmptyReplyLlm;
-
-impl Llm for EmptyReplyLlm {
-    fn complete(&self, _system: Option<&str>, _messages: &[ChatMessage]) -> LlmCompletion {
-        LlmCompletion {
-            reply: String::new(),
-            request_body_json: None,
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Arena / Game doubles (game loop tests)
-// ---------------------------------------------------------------------------
-
-/// Stub arena tool for game loop tests. Returns replies from a list
-/// in order, then returns empty strings.
-pub struct StubArenaTool {
-    replies: Mutex<Vec<String>>,
-}
-
-impl StubArenaTool {
-    pub fn new(replies: Vec<String>) -> Self {
-        Self {
-            replies: Mutex::new(replies),
-        }
-    }
-}
-
-impl Tool for StubArenaTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            name: "arena",
-            description: "stub arena tool for tests",
-            input_schema: serde_json::json!({}),
-        }
-    }
-
-    fn execute(&self, _input: &serde_json::Value) -> Result<serde_json::Value, ToolError> {
-        let mut replies = self
-            .replies
-            .lock()
-            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
-        let reply = if replies.is_empty() {
-            String::new()
-        } else {
-            replies.remove(0)
-        };
-        Ok(serde_json::json!({ "reply": reply }))
-    }
-}
-
-/// Stub arena tool that always fails.
-pub struct FailingArenaTool;
-
-impl Tool for FailingArenaTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            name: "arena",
-            description: "failing arena tool for tests",
-            input_schema: serde_json::json!({}),
-        }
-    }
-
-    fn execute(&self, _input: &serde_json::Value) -> Result<serde_json::Value, ToolError> {
-        Err(ToolError::ExecutionFailed(String::from("boom")))
-    }
-}
-
-/// Minimal [`Game`] for [`crate::game_loop::play_game`] tests.
-pub struct StubGame {
-    pub max_turns: usize,
-}
-
-impl Game for StubGame {
-    fn challenge(&self) -> Challenge {
-        Challenge {
-            system_prompt: String::from("test system prompt"),
-            private_context: None,
-            opening_message: String::from("hello"),
-        }
-    }
-
-    fn is_complete(&self, turn: usize, last_peer_reply: &str) -> bool {
-        turn >= self.max_turns || last_peer_reply.is_empty()
     }
 }

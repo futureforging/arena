@@ -1,7 +1,6 @@
-mod arena_transport;
+mod arena_sync;
 mod play_wasi;
-mod production_arena;
-mod wasi_environment;
+mod wasi_http;
 mod wasi_llm;
 
 use anyhow::Context;
@@ -15,15 +14,15 @@ use tracing::Level;
 use wasip3::exports::http::handler::Guest;
 use wasip3::http::types::{ErrorCode, Request, Response as WasiResponse};
 
-use arena_transport::ArenaTransport;
 use play_wasi::play_psi_wasi;
-use production_arena::ProductionArena;
+use verity_adapters::{arena::DemoArena, CliEnvironment, DemoArenaConfig};
 use verity_core::agent::Agent;
+use verity_core::arena::Arena;
 use verity_core::games::Role;
 use verity_core::tool::ToolRegistry;
 use verity_tools::arena_client::ArenaClientTool;
-use wasi_environment::WasiEnvironment;
-use wasi_llm::WasiLlm;
+use wasi_http::WasiHttpAdapter;
+use wasi_llm::{WasiLlm, DEFAULT_MODEL};
 
 struct Http;
 wasip3::http::service::export!(Http);
@@ -52,13 +51,13 @@ async fn play_handler(body: Bytes) -> impl IntoResponse {
     }
 }
 
-async fn build_psi_guest_agent<A: ArenaTransport>(arena: A) -> anyhow::Result<Agent<WasiEnvironment, WasiLlm>> {
+async fn build_psi_guest_agent<A: Arena>(arena: A) -> anyhow::Result<Agent<CliEnvironment, WasiLlm>> {
     let llm = WasiLlm::new().await.context("initializing LLM")?;
-    let environment = WasiEnvironment;
+    let environment = CliEnvironment;
 
     let arena_for_tool = arena.clone();
     let arena_tool = ArenaClientTool::new(move |msg| {
-        arena_for_tool.send_sync(msg).map_err(|e| e.to_string())
+        arena_sync::send_sync(&arena_for_tool, msg).map_err(|e| e.to_string())
     });
 
     let registry = ToolRegistry::new(vec![
@@ -99,7 +98,16 @@ async fn play_handler_inner(body: Bytes) -> anyhow::Result<Json<Value>> {
     };
     let username = input["username"].as_str().unwrap_or("missionary");
 
-    let arena = ProductionArena::new(arena_url, invite, signer_url, username);
+    let arena = DemoArena::new(
+        WasiHttpAdapter::new(),
+        DemoArenaConfig {
+            arena_url: arena_url.to_string(),
+            invite: invite.to_string(),
+            signer_url: signer_url.to_string(),
+            username: username.to_string(),
+            model: DEFAULT_MODEL.to_string(),
+        },
+    );
     let agent = build_psi_guest_agent(arena.clone()).await?;
     let turns = play_psi_wasi(agent, arena, role)
         .await

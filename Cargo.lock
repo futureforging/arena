@@ -2786,6 +2786,7 @@ dependencies = [
  "omnia-wasi-vault",
  "serde_json",
  "tracing",
+ "verity-adapters",
  "verity-core",
  "verity-tools",
  "wasip3",
@@ -3485,13 +3486,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
+name = "verity-adapters"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "http",
+ "serde_json",
+ "tracing",
+ "verity-core",
+]
+
+[[package]]
 name = "verity-core"
 version = "0.1.0"
 dependencies = [
  "hex",
  "serde_json",
  "sha2",
- "tempfile",
 ]
 
 [[package]]
