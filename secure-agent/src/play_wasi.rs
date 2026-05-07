@@ -1,7 +1,7 @@
 //! Game loop for the WASI guest without `wit_bindgen::block_on` inside Omnia’s async HTTP handler.
 //!
 //! [`verity_core::game_loop::play_game`] is synchronous and calls [`verity_core::llm::Llm::complete`] /
-//! the arena adapter's `send_sync` (which uses `block_on` for async WASI I/O). Invoking that from
+//! [`crate::arena_sync::send_sync`] (which uses `block_on` for async WASI I/O). Invoking that from
 //! `async fn play_handler` deadlocks: the handler never completes the nested outbound HTTP work.
 //!
 //! Axum’s `Handler` trait requires a `Send` future. An `async fn` that took `game: &dyn Game` produced a
@@ -9,6 +9,7 @@
 
 use verity_core::{
     agent::Agent,
+    arena::{Arena, ArenaError},
     game::Game,
     games::{PsiGame, Role},
     llm::{ChatMessage, Llm},
@@ -21,7 +22,6 @@ use verity_core::{
 use verity_adapters::CliEnvironment;
 
 use crate::{
-    arena_transport::{ArenaTransport, WasiArenaError},
     extract_peer_arrays::{extract_peer_hash_array, extract_peer_number_array},
     operator_parse::parse_private_set,
     wasi_llm::WasiLlm,
@@ -96,7 +96,7 @@ macro_rules! receive_one_turn {
 }
 
 /// PSI game — uses a concrete [`PsiGame`] so the future is [`Send`] for Axum.
-pub async fn play_psi_wasi<A: ArenaTransport>(
+pub async fn play_psi_wasi<A: Arena>(
     mut agent: Agent<CliEnvironment, WasiLlm>,
     arena: A,
     role: Role,
@@ -130,7 +130,7 @@ pub async fn play_psi_wasi<A: ArenaTransport>(
                 .map(|(i, m)| format!("  msg {i}: {m}"))
                 .collect::<Vec<_>>()
                 .join("\n");
-            PlayGameWasiError::Arena(WasiArenaError::Other(format!(
+            PlayGameWasiError::Arena(ArenaError::Other(format!(
                 "no parseable private_set in {} operator message(s):\n{preview}",
                 operator_messages.len()
             )))
@@ -219,7 +219,7 @@ pub async fn play_psi_wasi<A: ArenaTransport>(
     let guess: Vec<u32> = match role {
         Role::First => {
             let peer_hashes = extract_peer_hash_array(&transcript, USER_ROLE).ok_or_else(|| {
-                PlayGameWasiError::Arena(WasiArenaError::Other(
+                PlayGameWasiError::Arena(ArenaError::Other(
                     "could not extract peer hash array from transcript".to_string(),
                 ))
             })?;
@@ -228,7 +228,7 @@ pub async fn play_psi_wasi<A: ArenaTransport>(
         Role::Second => {
             let peer_intersection =
                 extract_peer_number_array(&transcript, USER_ROLE).ok_or_else(|| {
-                    PlayGameWasiError::Arena(WasiArenaError::Other(
+                    PlayGameWasiError::Arena(ArenaError::Other(
                         "could not extract peer plaintext intersection from transcript".to_string(),
                     ))
                 })?;
@@ -244,7 +244,7 @@ pub async fn play_psi_wasi<A: ArenaTransport>(
 
     agent.print(&format!("{} submitting guess: {:?}", agent.name, guess));
     let guess_json = serde_json::to_string(&guess)
-        .map_err(|e| PlayGameWasiError::Arena(WasiArenaError::Other(e.to_string())))?;
+        .map_err(|e| PlayGameWasiError::Arena(ArenaError::Other(e.to_string())))?;
     arena
         .submit_message_async("guess", &guess_json)
         .await
@@ -270,7 +270,7 @@ pub async fn play_psi_wasi<A: ArenaTransport>(
 pub enum PlayGameWasiError {
     SessionStart(StartSessionError),
     AgentReceive(ReceiveMessageError),
-    Arena(WasiArenaError),
+    Arena(ArenaError),
 }
 
 impl std::fmt::Display for PlayGameWasiError {

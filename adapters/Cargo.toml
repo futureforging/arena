@@ -4,4 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bytes = "1.11.1"
+http = "1.4.0"
+serde_json = "1.0.149"
+tracing = "0.1.44"
 verity-core = { path = "../core" }

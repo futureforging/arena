@@ -1,12 +1,12 @@
-//! Normalization for arena base URLs used by outbound WASI HTTP.
+//! Base-URL normalization for arena and signer endpoints.
 
-/// Prepares the arena base URL for outbound WASI HTTP.
+/// Prepares the arena base URL for outbound HTTP.
 ///
 /// - Adds `http://` when missing (relative URLs break `wasi:http` outbound).
 /// - Strips a trailing `/` so `{base}/api/v1/...` paths join without a double slash.
 /// - Rewrites the host `localhost` (any ASCII case) to **`127.0.0.1`**. Some local servers bind
 ///   IPv4 only; resolving `localhost` can yield **`::1`**, missing the listener.
-pub fn normalize_arena_base_url(raw: &str) -> String {
+pub(super) fn normalize_arena_base_url(raw: &str) -> String {
     let trimmed = raw
         .trim()
         .trim_end_matches('/');
